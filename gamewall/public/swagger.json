@@ -1,0 +1,76 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "WLED DNRGB REST", "version": "1.3.0" },
+  "paths": {
+    "/api/v1/wled/dnrgb-range": {
+      "post": {
+        "summary": "Send contiguous RGB values (DNRGB mode)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["host", "port", "startIndex", "rgb"],
+                "properties": {
+                  "host": { "type": "string", "example": "192.168.178.146" },
+                  "port": { "type": "string", "example": "21324" },
+                  "startIndex": { "type": "integer", "minimum": 0, "maximum": 65535, "example": 0 },
+                  "rgb": {
+                    "type": "array",
+                    "items": { "type": "integer", "minimum": 0, "maximum": 255 },
+                    "example": [255,0,0,0,255,0,0,0,255]
+                  },
+                  "timeoutSeconds": { "type": "integer", "minimum": 0, "maximum": 255, "example": 2 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "OK" },
+          "400": { "description": "Bad request" },
+          "500": { "description": "Internal error" }
+        }
+      }
+    },
+    "/api/v1/wled/ranges-color": {
+      "post": {
+        "summary": "Set one or more ranges to a solid color",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["host", "port", "ranges"],
+                "properties": {
+                  "host": { "type": "string", "example": "192.168.178.146" },
+                  "port": { "type": "string", "example": "21324" },
+                  "timeoutSeconds": { "type": "integer", "minimum": 0, "maximum": 255, "example": 2 },
+                  "ranges": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["startIndex", "count", "color"],
+                      "properties": {
+                        "startIndex": { "type": "integer", "minimum": 0, "maximum": 65535, "example": 0 },
+                        "count": { "type": "integer", "minimum": 1, "example": 13 },
+                        "color": { "type": "string", "example": "#ff0000" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Applied" },
+          "206": { "description": "Partial failure" },
+          "400": { "description": "Bad request" }
+        }
+      }
+    }
+  }
+}
