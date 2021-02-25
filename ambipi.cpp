@@ -3,10 +3,10 @@
 
 // 30 leds/meter
 
-#define LEDS_TOP	(60)
-#define LEDS_BOTTOM	(60*0)
-#define LEDS_LEFT	(34)
-#define LEDS_RIGHT	(34)
+#define LEDS_TOP	(45)
+#define LEDS_BOTTOM	(45)
+#define LEDS_LEFT	(30)
+#define LEDS_RIGHT	(30)
 
 //#define LEDS_TOP	(16)
 //#define LEDS_BOTTOM	(16)

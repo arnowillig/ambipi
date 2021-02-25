@@ -39,7 +39,7 @@ int main(int argc, char *argv[])
 #endif
 	}
 
-
+#if 0
 	fprintf(stderr, "Setting color..\n");
 	int bri = 255;
 	ambiPi.setColor(bri,bri,bri);
@@ -59,27 +59,33 @@ int main(int argc, char *argv[])
 		}
 		
 	}
+#endif
+#if 1
+#ifndef _DEVEL_
+	cv::VideoCapture* capture = new cv::VideoCapture("/home/pi/big_buck_bunny_1080p_surround.avi");
+#else
+	cv::VideoCapture* capture = new cv::VideoCapture("/home/akw/Downloads/big_buck_bunny_1080p_surround.avi");
+#endif
+	cv::Mat inputFrame;
+	while (running) {
+		capture->grab();
+		capture->retrieve(inputFrame);
+#ifndef _DEVEL_
+		ambiPi.calculateAmbilightFromFrame(inputFrame, 0.75);
+		ambiPi.render();		
+#else
+		cv::resize(inputFrame, inputFrame, cv::Size(0,0), 0.5, 0.5, cv::INTER_LINEAR);
+		ambiPi.guiDemo(inputFrame);
+		if  (cv::waitKey(10)=='q') {
+			running = false;
+		}
+#endif		
+	}
+#endif
+
 	fprintf(stderr, "Stopping AmbiPi..\n");
 	ambiPi.setColor(0,0,0);
 	ambiPi.render();
 	fprintf(stderr, "Stopping AmbiPi done..\n");
-/*
-	cv::VideoCapture* capture = new cv::VideoCapture("/home/akw/Downloads/big_buck_bunny_1080p_surround.avi");
-
-	cv::Mat inputFrame;
-	while (true) {
-		capture->grab();
-		capture->retrieve(inputFrame);
-
-#ifdef _DEVEL_
-		cv::resize(inputFrame, inputFrame, cv::Size(0,0), 0.5, 0.5, cv::INTER_LINEAR);
-		ambiPi.guiDemo(inputFrame);
-
-		if  (cv::waitKey(10)=='q') {
-			break;
-		}
-#endif
-	}
-*/
 	return 0;
 }
