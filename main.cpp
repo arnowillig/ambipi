@@ -39,15 +39,16 @@ int main(int argc, char *argv[])
 #endif
 	}
 
-#if 0
+#if 1
 	fprintf(stderr, "Setting color..\n");
 	int bri = 255;
-	ambiPi.setColor(bri,bri,bri);
+	ambiPi.setColor      (bri, bri, bri);
 	ambiPi.render();
 	time_t t = time(NULL);
 	int fps = 0;
 	for (int i=0; running; i++) {
-		ambiPi.rainbow(i);
+		ambiPi.drawTestPattern(i, bri);
+		//  ambiPi.rainbow(i);
 		// 
 		usleep(10*1000);
 		fps++;
@@ -60,7 +61,7 @@ int main(int argc, char *argv[])
 		
 	}
 #endif
-#if 1
+#if 0
 #ifndef _DEVEL_
 	cv::VideoCapture* capture = new cv::VideoCapture("/home/pi/big_buck_bunny_1080p_surround.avi");
 #else
