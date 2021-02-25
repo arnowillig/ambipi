@@ -18,7 +18,9 @@ public:
 
 	bool init(double gamma);
 public:
+#ifdef _DEVEL_
 	void guiDemo(cv::Mat frame);
+#endif
 	void calculateAmbilightFromFrame(cv::Mat frame, double alpha);
 	void clear();
 	void render();

@@ -99,6 +99,7 @@ bool AmbiPi::init(double gamma)
 	return true;
 }
 
+#ifdef _DEVEL_
 void AmbiPi::guiDemo(cv::Mat frame)
 {
 	const int border = 145;
@@ -161,6 +162,7 @@ void AmbiPi::guiDemo(cv::Mat frame)
 
 	cv::imshow("AmbiPi", out);
 }
+#endif
 
 void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, double alpha)
 {
