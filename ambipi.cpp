@@ -4,7 +4,7 @@
 // 30 leds/meter
 
 #define LEDS_TOP	(60)
-#define LEDS_BOTTOM	(60)
+#define LEDS_BOTTOM	(60*0)
 #define LEDS_LEFT	(34)
 #define LEDS_RIGHT	(34)
 
@@ -34,16 +34,52 @@ AmbiPi::~AmbiPi()
 
 void AmbiPi::clear()
 {
-	_colorsT = cv::Mat(1, LEDS_TOP,    CV_8UC3, cv::Scalar(0, 0, 0));
-	_colorsB = cv::Mat(1, LEDS_BOTTOM, CV_8UC3, cv::Scalar(0, 0, 0));
-	_colorsL = cv::Mat(LEDS_LEFT, 1,   CV_8UC3, cv::Scalar(0, 0, 0));
-	_colorsR = cv::Mat(LEDS_RIGHT, 1,  CV_8UC3, cv::Scalar(0, 0, 0));
+	setColor(0,0,0);
+}
+
+void AmbiPi::setColor(uint8_t r, uint8_t g, uint8_t  b)
+{
+	_colorsT = cv::Mat(1, LEDS_TOP,    CV_8UC3, cv::Scalar(b, g, r));
+	_colorsB = cv::Mat(1, LEDS_BOTTOM, CV_8UC3, cv::Scalar(b, g, r));
+	_colorsL = cv::Mat(LEDS_LEFT, 1,   CV_8UC3, cv::Scalar(b, g, r));
+	_colorsR = cv::Mat(LEDS_RIGHT, 1,  CV_8UC3, cv::Scalar(b, g, r));
+}
+
+int AmbiPi::ledCount() const
+{
+	return LEDS_LEFT + LEDS_TOP + LEDS_RIGHT + LEDS_BOTTOM;
+}
+
+void AmbiPi::rainbow(int cnt)
+{
+	uint8_t r,g,b;
+	for (int i = 0; i<ledCount(); i++) {
+		uint8_t pos = (255*i / (ledCount()-1) + cnt) % 256;
+		if (pos<85) {
+			r = pos*3;
+			g = 255-pos*3;
+			b = 0;
+		} else if (pos<170) {
+			pos -= 85;
+			r = 255-pos*3;
+			g = 0;
+			b = pos*3;
+		} else {
+			pos -= 170;
+			r = 0;
+			g = pos*3;
+			b = 255-pos*3;
+		}
+		_ws2811->channel[0].leds[i] = ((r & 0x0ff) << 16) | ((g & 0x0ff) << 8) | (b & 0x0ff);
+	}
+	ws2811_render(_ws2811);
 }
 
 void AmbiPi::render()
 {
-	while (_ws2811->render_wait_time>0) {
-		usleep(1000);
+	if (_ws2811->render_wait_time>0) {
+		fprintf(stderr, "Wait for reender: %d\n", _ws2811->render_wait_time);
+		usleep(_ws2811->render_wait_time);
 	}
 
 	for (int i=0; i<LEDS_LEFT; i++) {
@@ -54,6 +90,16 @@ void AmbiPi::render()
 		cv::Vec3b c = _colorsT.at<cv::Vec3b>(cv::Point(i, 0));
 		_ws2811->channel[0].leds[i+LEDS_LEFT] = ((c[2] & 0x0ff) << 16) | ((c[1] & 0x0ff) << 8) | (c[0] & 0x0ff);
 	}
+#if 1
+	for (int i=0; i<LEDS_RIGHT; i++) {
+		cv::Vec3b c = _colorsR.at<cv::Vec3b>(cv::Point(0, i));
+		_ws2811->channel[0].leds[i+LEDS_LEFT+LEDS_TOP] = ((c[2] & 0x0ff) << 16) | ((c[1] & 0x0ff) << 8) | (c[0] & 0x0ff);
+	}
+	for (int i=0; i<LEDS_BOTTOM; i++) {
+		cv::Vec3b c = _colorsB.at<cv::Vec3b>(cv::Point(i, 0));
+		_ws2811->channel[0].leds[i+LEDS_LEFT+LEDS_TOP+LEDS_RIGHT] = ((c[2] & 0x0ff) << 16) | ((c[1] & 0x0ff) << 8) | (c[0] & 0x0ff);
+	}
+#endif	
 	/*
 	for (int i=0; i<LEDS_BOTTOM; i++) {
 		cv::Vec3b c = _colorsB.at<cv::Vec3b>(cv::Point(i, 0));
@@ -76,7 +122,7 @@ bool AmbiPi::init(double gamma)
 	_ws2811->freq			= WS2811_TARGET_FREQ;
 	_ws2811->dmanum			= DMA;
 	_ws2811->channel[0].gpionum	= GPIO_PIN1;
-	_ws2811->channel[0].count	= LEDS_LEFT +  LEDS_TOP;
+	_ws2811->channel[0].count	= LEDS_LEFT +  LEDS_TOP + LEDS_RIGHT + LEDS_BOTTOM;
 	_ws2811->channel[0].strip_type	= WS2812_STRIP;
 	_ws2811->channel[0].brightness	= MAX_BRIGHTNESS;
 	/*

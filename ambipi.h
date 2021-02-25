@@ -17,7 +17,10 @@ public:
 	virtual ~AmbiPi();
 
 	bool init(double gamma);
-public:
+	void setColor(uint8_t r, uint8_t g, uint8_t  b);
+	int ledCount() const;
+	void rainbow(int cnt);
+
 #ifdef _DEVEL_
 	void guiDemo(cv::Mat frame);
 #endif
