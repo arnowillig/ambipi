@@ -5,8 +5,8 @@
 
 #define LEDS_TOP	(60)
 #define LEDS_BOTTOM	(60)
-#define LEDS_LEFT	(35)
-#define LEDS_RIGHT	(35)
+#define LEDS_LEFT	(34)
+#define LEDS_RIGHT	(34)
 
 //#define LEDS_TOP	(16)
 //#define LEDS_BOTTOM	(16)
@@ -17,7 +17,7 @@
 #define GPIO_PIN1               18
 #define GPIO_PIN2               13
 #define DMA                     10
-#define MAX_BRIGHTNESS		0x80
+#define MAX_BRIGHTNESS		180
 
 AmbiPi::AmbiPi()
 {
@@ -66,6 +66,8 @@ void AmbiPi::setColorRight(uint8_t r, uint8_t g, uint8_t  b)
 
 void AmbiPi::drawTestPattern(int i, int bri)
 {
+	bri = 0;
+	int bri2 = 128;
 	int cnt = (i / 2)  % ledCount();
         setColorLeft  (bri,  0,    0);
         setColorTop   (  0, bri, bri);
@@ -73,26 +75,26 @@ void AmbiPi::drawTestPattern(int i, int bri)
         setColorRight (bri,   0, bri);
         
         if (cnt < LEDS_LEFT) {
+        	cnt = LEDS_LEFT -  1 - cnt;
 	        _colorsL.at<std::array<uint8_t,3>>(cnt % LEDS_LEFT, 0)[0] = 0; 
 	        _colorsL.at<std::array<uint8_t,3>>(cnt % LEDS_LEFT, 0)[1] = 0; 
-	        _colorsL.at<std::array<uint8_t,3>>(cnt % LEDS_LEFT, 0)[2] = 40; 
+	        _colorsL.at<std::array<uint8_t,3>>(cnt % LEDS_LEFT, 0)[2] = bri2; 
         } else if (cnt < LEDS_LEFT + LEDS_TOP) {
 	        cnt -= LEDS_LEFT;
         	_colorsT.at<std::array<uint8_t,3>>(0,cnt % LEDS_TOP)[0] = 0; 
         	_colorsT.at<std::array<uint8_t,3>>(0,cnt % LEDS_TOP)[1] = 0; 
-        	_colorsT.at<std::array<uint8_t,3>>(0,cnt % LEDS_TOP)[2] = 40; 
+        	_colorsT.at<std::array<uint8_t,3>>(0,cnt % LEDS_TOP)[2] = bri2; 
         } else if (cnt<LEDS_LEFT + LEDS_TOP + LEDS_RIGHT) {
         	cnt -= LEDS_LEFT + LEDS_TOP;
-        	cnt = LEDS_RIGHT -  1 - cnt;
 	        _colorsR.at<std::array<uint8_t,3>>(cnt % LEDS_RIGHT,0)[0] = 0; 
 	      	_colorsR.at<std::array<uint8_t,3>>(cnt % LEDS_RIGHT,0)[1] = 0; 
-	      	_colorsR.at<std::array<uint8_t,3>>(cnt % LEDS_RIGHT,0)[2] = 40; 
+	      	_colorsR.at<std::array<uint8_t,3>>(cnt % LEDS_RIGHT,0)[2] = bri2; 
         } else  {
         	cnt -= LEDS_LEFT + LEDS_TOP + LEDS_RIGHT;
         	cnt = LEDS_BOTTOM - 1 - cnt;
 	        _colorsB.at<std::array<uint8_t,3>>(0,cnt % LEDS_BOTTOM)[0] = 0; 
 	        _colorsB.at<std::array<uint8_t,3>>(0,cnt % LEDS_BOTTOM)[1] = 0; 
-	        _colorsB.at<std::array<uint8_t,3>>(0,cnt % LEDS_BOTTOM)[2] = 40; 
+	        _colorsB.at<std::array<uint8_t,3>>(0,cnt % LEDS_BOTTOM)[2] = bri2; 
         }
 
 
@@ -136,13 +138,13 @@ void AmbiPi::rainbow(int cnt)
 void AmbiPi::render()
 {
 	if (_ws2811->render_wait_time>0) {
-		fprintf(stderr, "Wait for render: %d\n", _ws2811->render_wait_time);
+		//fprintf(stderr, "Wait for render: %d msec\n", _ws2811->render_wait_time);
 		usleep(_ws2811->render_wait_time);
 	}
 
 	for (int i=0; i<LEDS_LEFT; i++) {
 		cv::Vec3b c = _colorsL.at<cv::Vec3b>(cv::Point(0, i));
-		_ws2811->channel[0].leds[i] = ((c[2] & 0x0ff) << 16) | ((c[1] & 0x0ff) << 8) | (c[0] & 0x0ff);
+		_ws2811->channel[0].leds[LEDS_LEFT-1-i] = ((c[2] & 0x0ff) << 16) | ((c[1] & 0x0ff) << 8) | (c[0] & 0x0ff);
 	}
 	for (int i=0; i<LEDS_TOP; i++) {
 		cv::Vec3b c = _colorsT.at<cv::Vec3b>(cv::Point(i, 0));
@@ -164,7 +166,7 @@ void AmbiPi::render()
 	}
 	for (int i=0; i<LEDS_RIGHT; i++) {
 		cv::Vec3b c = _colorsR.at<cv::Vec3b>(cv::Point(0, i));
-		_ws2811->channel[1].leds[i+LEDS_BOTTOM] = ((c[2] & 0x0ff) << 16) | ((c[1] & 0x0ff) << 8) | (c[0] & 0x0ff);
+		_ws2811->channel[1].leds[LEDS_BOTTOM+LEDS_RIGHT-1-i] = ((c[2] & 0x0ff) << 16) | ((c[1] & 0x0ff) << 8) | (c[0] & 0x0ff);
 	}
 	
 #endif	
@@ -284,7 +286,9 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, double alpha)
 
 	cv::Mat colorsLeft;
 	cv::resize(frame(cv::Rect(0,0, dw, frame.rows)), colorsLeft, cv::Size(1, LEDS_LEFT), 0, 0, interpolation);
+	//cv::flip(colorsLeft, colorsLeft, 0);
 	cv::addWeighted(_colorsL, alpha, colorsLeft, 1.0 - alpha, 0.0, _colorsL);
+	
 
 	cv::Mat colorsRight;
 	cv::resize(frame(cv::Rect(frame.cols-dw, 0, dw, frame.rows)), colorsRight, cv::Size(1, LEDS_RIGHT), 0, 0, interpolation); // INTER_CUBIC
