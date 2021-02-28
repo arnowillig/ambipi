@@ -12,7 +12,9 @@ LIBS += -lopencv_core -lopencv_imgproc -lopencv_videoio -lopencv_imgcodecs -lpth
 # Pistache
 LIBS += pistache/build/src/libpistache.a
 
-INCLUDES += -I pistache/include/
+LIBS += /opt/vc/lib/libbcm_host.so
+
+INCLUDES += -I pistache/include/ -I /opt/vc/include
 
 # -lopencv_calib3d
 

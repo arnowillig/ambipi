@@ -17,7 +17,12 @@
 #ifdef _DEVEL_
 #define TEST_VIDEO "/home/akw/Downloads/big_buck_bunny_1080p_surround.avi"
 #else
-#define TEST_VIDEO "/home/pi/big_buck_bunny_1080p_surround.avi"
+// #define TEST_VIDEO "/home/pi/Videos/big_buck_bunny_1080p_surround.avi"
+// #define TEST_VIDEO "/home/pi/Videos/Ambilight-Color-Wheel-Test-2.mp4"
+#define TEST_VIDEO "/home/pi/Videos/Avatar.Ambitest.mkv"
+
+#include <bcm_host.h>
+
 #endif
 
 using namespace std;
@@ -51,6 +56,12 @@ int main(int argc, char *argv[])
 {
 	(void) argc;
 	(void) argv;
+	
+	const char* testVideo = TEST_VIDEO;
+	
+	if (argc>1) {
+		testVideo = argv[1];
+	}
 
 	signal(SIGINT,  signalHandler);
 	signal(SIGTERM, signalHandler);
@@ -75,7 +86,7 @@ int main(int argc, char *argv[])
 	// ambiPi.setMode(AmbiPi::White);
 	ambiPi.setMode(AmbiPi::AmbiLight);
 	
-	cv::VideoCapture* capture = new cv::VideoCapture(TEST_VIDEO);
+	cv::VideoCapture* capture = new cv::VideoCapture(testVideo);
 	
 	time_t t = time(NULL);
 	int fps = 0;
@@ -105,10 +116,13 @@ int main(int argc, char *argv[])
 		case AmbiPi::AmbiLight:
 			capture->grab();
 			capture->retrieve(frame);
+			if (!frame.empty() && frame.cols != 1920) {
+				cv::resize(frame, frame, cv::Size(1920,1080), 0, 0, cv::INTER_LINEAR);
+			}
 			sleep = 0;
 			// frame = ambiPi.createTestImage(1920,1080);
 			if (!frame.empty()) {
-				ambiPi.calculateAmbilightFromFrame(frame, 0.90);
+				ambiPi.calculateAmbilightFromFrame(frame, 0.80);
 			}
 			break;
 		default:
@@ -145,3 +159,41 @@ int main(int argc, char *argv[])
 	fprintf(stderr, "Stopping AmbiPi done..\n");
 	return 0;
 }
+
+#ifndef _DEVEL_
+
+int dispmanx(void)
+{
+    bcm_host_init();
+
+    DISPMANX_DISPLAY_HANDLE_T display = vc_dispmanx_display_open(0);
+
+    DISPMANX_MODEINFO_T info;
+    int ret = vc_dispmanx_display_get_info(display, &info);
+    assert(ret == 0);
+    printf("Display is %d x %d\n", info.width, info.height );
+
+    void* image = calloc( 1, info.width * 3 * info.height);
+    
+    uint32_t vc_image_ptr;
+    DISPMANX_RESOURCE_HANDLE_T resource = vc_dispmanx_resource_create(VC_IMAGE_RGB888, info.width, info.height, &vc_image_ptr);
+
+    VC_RECT_T rect;
+    DISPMANX_TRANSFORM_T transform;
+    vc_dispmanx_snapshot(display, resource, transform);
+    vc_dispmanx_rect_set(&rect, 0, 0, info.width, info.height);
+    vc_dispmanx_resource_read_data(resource, &rect, image, info.width*3); 
+
+    FILE *fp = fopen("out.ppm", "wb");
+    fprintf(fp, "P6\n%d %d\n255\n", info.width, info.height);
+    fwrite(image, info.width*3*info.height, 1, fp);
+    fclose(fp);
+
+    ret = vc_dispmanx_resource_delete(resource);
+    assert( ret == 0 );
+    ret = vc_dispmanx_display_close(display);
+    assert( ret == 0 );
+
+    return 0;
+}
+#endif
