@@ -17,7 +17,8 @@
 #define GPIO_PIN1               18
 #define GPIO_PIN2               13
 #define DMA                     10
-#define MAX_BRIGHTNESS		180
+#define MAX_BRIGHTNESS		255
+// #define MAX_BRIGHTNESS		40
 
 AmbiPi::AmbiPi()
 {
@@ -129,7 +130,11 @@ void AmbiPi::rainbow(int cnt)
 			g = pos*3;
 			b = 255-pos*3;
 		}
-		_ws2811->channel[0].leds[i] = ((r & 0x0ff) << 16) | ((g & 0x0ff) << 8) | (b & 0x0ff);
+		if (i>=60 && i<=67) {
+			_ws2811->channel[0].leds[i] = 0x0;
+		} else {
+			_ws2811->channel[0].leds[i] = ((r & 0x0ff) << 16) | ((g & 0x0ff) << 8) | (b & 0x0ff);
+		}
 		_ws2811->channel[1].leds[i] = ((r & 0x0ff) << 16) | ((g & 0x0ff) << 8) | (b & 0x0ff);
 	}
 	ws2811_render(_ws2811);
@@ -148,6 +153,13 @@ void AmbiPi::render()
 	}
 	for (int i=0; i<LEDS_TOP; i++) {
 		cv::Vec3b c = _colorsT.at<cv::Vec3b>(cv::Point(i, 0));
+/*
+		if (i>10 && i<15) {
+		_ws2811->channel[0].leds[i+LEDS_LEFT] = 0x0;
+		} else {
+		_ws2811->channel[0].leds[i+LEDS_LEFT] = 0x0;
+		}
+*/
 		_ws2811->channel[0].leds[i+LEDS_LEFT] = ((c[2] & 0x0ff) << 16) | ((c[1] & 0x0ff) << 8) | (c[0] & 0x0ff);
 	}
 #if 0
