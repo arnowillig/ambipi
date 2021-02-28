@@ -1,5 +1,6 @@
 #include "ambipi.h"
 #include "unistd.h"
+#include <array>
 
 // 30 leds/meter
 
@@ -16,7 +17,7 @@
 #define TARGET_FREQ             WS2811_TARGET_FREQ
 #define GPIO_PIN1               18
 #define GPIO_PIN2               13
-#define DMA                     10
+#define WS2811_DMA              10
 #define MAX_BRIGHTNESS		255
 // #define MAX_BRIGHTNESS		40
 
@@ -62,8 +63,6 @@ void AmbiPi::setColorRight(uint8_t r, uint8_t g, uint8_t  b)
 {
 	_colorsR = cv::Mat(LEDS_RIGHT, 1,  CV_8UC3, cv::Scalar(b, g, r));
 }
-
-#include <array>
 
 void AmbiPi::drawTestPattern(int i, int bri)
 {
@@ -192,7 +191,7 @@ bool AmbiPi::init(double gamma)
 	memset(_ws2811, 0, sizeof(ws2811_t));
 
 	_ws2811->freq			= WS2811_TARGET_FREQ;
-	_ws2811->dmanum			= DMA;
+	_ws2811->dmanum			= WS2811_DMA;
 	_ws2811->channel[0].gpionum	= GPIO_PIN1;
 	_ws2811->channel[0].count	= LEDS_LEFT +  LEDS_TOP;// + LEDS_RIGHT + LEDS_BOTTOM;
 	_ws2811->channel[0].strip_type	= WS2812_STRIP;
@@ -204,6 +203,7 @@ bool AmbiPi::init(double gamma)
 	_ws2811->channel[1].brightness	= MAX_BRIGHTNESS;
 	
 
+#ifndef _DEVEL_
 	ws2811_return_t ret = ws2811_init(_ws2811);
 	if (ret != WS2811_SUCCESS) {
 		fprintf(stderr, "Error: %s\n", ws2811_get_return_t_str(ret));
@@ -214,6 +214,9 @@ bool AmbiPi::init(double gamma)
 	if (gamma != 0) {
 		ws2811_set_custom_gamma_factor(_ws2811, gamma);
 	}
+#else
+	(void) gamma;
+#endif
 	return true;
 }
 
