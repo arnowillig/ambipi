@@ -1,3 +1,6 @@
 [submodule "rpi_ws281x"]
 	path = rpi_ws281x
 	url = git@github.com:arnowillig/rpi_ws281x.git
+[submodule "pistache"]
+	path = pistache
+	url = https://github.com/pistacheio/pistache.git

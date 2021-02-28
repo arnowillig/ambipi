@@ -1,7 +1,23 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <signal.h>
+
+#include <pistache/endpoint.h>
+
 #include "ambipi.h"
+
+using namespace Pistache;
+
+class HelloHandler : public Http::Handler {
+public:
+
+    HTTP_PROTOTYPE(HelloHandler)
+
+    void onRequest(const Http::Request& request, Http::ResponseWriter response) {
+        response.send(Http::Code::Ok, "Hello, World\n");
+    }
+};
+
 
 static bool running = true;
 static bool screenshot = true;
@@ -27,11 +43,22 @@ int main(int argc, char *argv[])
 	(void) argc;
 	(void) argv;
 
-	signal(SIGINT,  signalHandler);
+//	signal(SIGINT,  signalHandler);
 	signal(SIGTERM, signalHandler);
 	signal(SIGUSR1, signalHandler);
 	
 	fprintf(stderr, "AmbiPi\n");
+	
+    Address addr(Ipv4::any(), Port(9080));
+
+    auto opts = Http::Endpoint::options().threads(1);
+    Http::Endpoint server(addr);
+    server.init(opts);
+    server.setHandler(Http::make_handler<HelloHandler>());
+    server.serve();	
+    return 0;
+
+	
 	AmbiPi ambiPi;
 	if (!ambiPi.init(0)) {
 #ifndef _DEVEL_
