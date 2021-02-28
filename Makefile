@@ -30,6 +30,9 @@ main.o: main.cpp
 restserver.o: restserver.cpp restserver.h ambipi.h
 	$(CXX) $(INCLUDES) -c $< -o $@
 
+framebuffer.o: framebuffer.cpp framebuffer.h
+	$(CXX) $(INCLUDES) -c $< -o $@
+
 %.o: %.cpp $(INCLUDES)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
