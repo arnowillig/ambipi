@@ -12,7 +12,8 @@ public:
 		White,
 		Color,
 		Rainbow,
-		TestPattern
+		TestPattern,
+		AmbiLight
 	};
 
 public:
@@ -34,11 +35,12 @@ public:
 	void rainbow(int cnt);
 
 #ifdef _DEVEL_
-	void guiDemo(cv::Mat frame);
+	void drawGUI(cv::Mat frame);
 #endif
 	void calculateAmbilightFromFrame(cv::Mat frame, double alpha);
 	void clear();
 	void render();
+	cv::Mat createTestImage(int w, int h);
 private:
 	ws2811_t* _ws2811;
 	cv::Mat _colorsT;
