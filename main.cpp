@@ -2,22 +2,20 @@
 #include <unistd.h>
 #include <signal.h>
 
+#include <algorithm>
+
+#include <pistache/http.h>
+#include <pistache/router.h>
 #include <pistache/endpoint.h>
+
+#include <thread>
 
 #include "ambipi.h"
 
+using namespace std;
 using namespace Pistache;
 
-class HelloHandler : public Http::Handler {
-public:
-
-    HTTP_PROTOTYPE(HelloHandler)
-
-    void onRequest(const Http::Request& request, Http::ResponseWriter response) {
-        response.send(Http::Code::Ok, "Hello, World\n");
-    }
-};
-
+AmbiPi ambiPi;
 
 static bool running = true;
 static bool screenshot = true;
@@ -38,47 +36,122 @@ static void signalHandler(int signo)
 	}
 }
 
+void setBrightness(const Rest::Request& request, Http::ResponseWriter response)
+{
+	int bri = request.param(":bri").as<int>();
+	std::cout << "BRI:" << bri << std::endl;
+	
+	char buf[16];
+	sprintf(buf,"%d",bri);
+	std::string resp = std::to_string(bri);
+	resp.append("\n");
+	response.send(Http::Code::Ok, resp);
+	ambiPi.setBrightness(bri);
+}
+
+void setColor(const Rest::Request& request, Http::ResponseWriter response)
+{
+	int r = request.param(":r").as<int>();
+	int g = request.param(":g").as<int>();
+	int b = request.param(":b").as<int>();
+	std::string resp = std::to_string(r) + "," + std::to_string(g) + "," + std::to_string(b) + "\n";
+	response.send(Http::Code::Ok, resp);
+	ambiPi.setMode(AmbiPi::Color);
+	ambiPi.setColor(r,g,b);
+}
+
+void setMode(const Rest::Request& request, Http::ResponseWriter response)
+{
+	std::string mode = request.param(":mode").as<std::string>();
+	std::string resp = mode + "\n";
+	response.send(Http::Code::Ok, resp);
+	if (mode=="off") {
+		ambiPi.setMode(AmbiPi::Off);
+	} else if (mode=="white") {
+		ambiPi.setMode(AmbiPi::White);
+	} else if (mode=="rainbow") {
+		ambiPi.setMode(AmbiPi::Rainbow);
+	}
+	if (mode=="testpattern") {
+		ambiPi.setMode(AmbiPi::TestPattern);
+	}
+}
+
+void restServer()
+{
+	using namespace Rest;
+
+	Address addr(Ipv4::any(), Port(9080));
+
+	Rest::Router router;
+	
+	Routes::Get(router, "/api/bri/:bri", Routes::bind(&setBrightness));
+	Routes::Get(router, "/api/mode/:mode", Routes::bind(&setMode));
+	Routes::Get(router, "/api/col/:r/:g/:b", Routes::bind(&setColor));
+	
+
+	auto opts = Http::Endpoint::options().threads(1).flags(Tcp::Options::ReuseAddr);
+	
+	Http::Endpoint server(addr);
+	server.init(opts);
+	server.setHandler(router.handler());
+	server.serve();	
+}
+
+
 int main(int argc, char *argv[])
 {
 	(void) argc;
 	(void) argv;
 
-//	signal(SIGINT,  signalHandler);
+	signal(SIGINT,  signalHandler);
 	signal(SIGTERM, signalHandler);
 	signal(SIGUSR1, signalHandler);
 	
 	fprintf(stderr, "AmbiPi\n");
 	
-    Address addr(Ipv4::any(), Port(9080));
-
-    auto opts = Http::Endpoint::options().threads(1);
-    Http::Endpoint server(addr);
-    server.init(opts);
-    server.setHandler(Http::make_handler<HelloHandler>());
-    server.serve();	
-    return 0;
-
+	std::thread restThread(&restServer); 
 	
-	AmbiPi ambiPi;
+	
 	if (!ambiPi.init(0)) {
 		return 1;
 	}
-#if 0
+#if 1
 	fprintf(stderr, "Setting color..\n");
-	ambiPi.setColor      (255, 170, 40);
-	ambiPi.render();
+	ambiPi.setMode(AmbiPi::White);
+	// ambiPi.setColor      (255, 170, 40);
+	// ambiPi.render();
 	time_t t = time(NULL);
 	int fps = 0;
 	for (int i=0; running; i++) {
-		// 
-		//ambiPi.drawTestPattern(i, bri);
-		// 
-		//
-	// 
-		ambiPi.rainbow(i);
-		usleep(25);
-		// 
-		//usleep(1000*1000);
+		int sleep = 25;
+		switch (ambiPi.mode()) {
+		case AmbiPi::Off:
+			sleep = 100;
+			ambiPi.setColor(0,0,0);
+			break;
+		case AmbiPi::White:
+			sleep = 100;
+			ambiPi.setColor(255, 170, 40);
+			break;
+		case AmbiPi::Color:
+			sleep = 100;
+			// ambiPi.setColor(255, 170, 40);
+			break;
+		case AmbiPi::Rainbow:
+			sleep  = 25;
+			ambiPi.rainbow(i);
+			break;	
+		case AmbiPi::TestPattern:
+			sleep  = 5;
+			ambiPi.drawTestPattern(i, 128);
+			break;	
+		default:
+			break;
+		}
+		ambiPi.render();
+		usleep(1000*sleep);
+
 		fps++;
 		time_t t2 = time(NULL);
 		if (t != t2) {

@@ -25,7 +25,7 @@ ambipi.o: ambipi.cpp ambipi.h
 	$(CXX) $(INCLUDES) -c $< -o $@
 
 main.o: main.cpp
-	$(CXX) $(INCLUDES) -c $< -o $@
+	$(CXX) $(INCLUDES) -std=c++17 -c $< -o $@
 
 %.o: %.cpp $(INCLUDES)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
