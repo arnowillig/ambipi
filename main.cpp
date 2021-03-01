@@ -31,6 +31,7 @@ using namespace std;
 using namespace Pistache;
 
 static bool running = true;
+static bool pauseVideo = false;
 static bool screenshot = true;
 
 static void signalHandler(int signo)
@@ -116,10 +117,12 @@ int main(int argc, char *argv[])
 			ambiPi.drawTestPattern(i, 128);
 			break;
 		case AmbiPi::AmbiLight:
-			capture->grab();
-			capture->retrieve(frame);
-			if (!frame.empty() && frame.cols != 1920) {
-				cv::resize(frame, frame, cv::Size(1920,1080), 0, 0, cv::INTER_LINEAR);
+			if (!pauseVideo) {
+				capture->grab();
+				capture->retrieve(frame);
+				if (!frame.empty() && frame.cols != 1920) {
+					cv::resize(frame, frame, cv::Size(1920,1080), 0, 0, cv::INTER_LINEAR);
+				}
 			}
 			sleep = 0;
 			// frame = ambiPi.createTestImage(1920,1080);
@@ -146,10 +149,14 @@ int main(int argc, char *argv[])
 			fps = 0;
 		}
 #ifdef _DEVEL_
-		if  (cv::waitKey(10)=='q') {
+		int key = cv::waitKey(10);
+		if  (key == 'q') {
 			running = false;
 		}
-#endif		
+		if  (key == ' ') {
+			pauseVideo = !pauseVideo;
+		}
+#endif
 	}
 
 	fprintf(stderr, "Stopping AmbiPi..\n");

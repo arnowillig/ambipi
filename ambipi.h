@@ -30,6 +30,12 @@ public:
 	void setColorTop(uint8_t r, uint8_t g, uint8_t  b);
 	void setColorBottom(uint8_t r, uint8_t g, uint8_t  b);
 	void setColorRight(uint8_t r, uint8_t g, uint8_t  b);
+
+	void setColorLeft(uint8_t idx, uint8_t r, uint8_t g, uint8_t  b);
+	void setColorTop(uint8_t idx, uint8_t r, uint8_t g, uint8_t  b);
+	void setColorBottom(uint8_t idx, uint8_t r, uint8_t g, uint8_t  b);
+	void setColorRight(uint8_t idx, uint8_t r, uint8_t g, uint8_t  b);
+
 	void drawTestPattern(int cnt, int bri);
 	int ledCount() const;
 	void rainbow(int cnt);

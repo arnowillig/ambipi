@@ -88,6 +88,30 @@ void AmbiPi::setColorRight(uint8_t r, uint8_t g, uint8_t  b)
 	}
 }
 
+void AmbiPi::setColorLeft(uint8_t idx, uint8_t r, uint8_t g, uint8_t b)
+{
+	assert(idx>=0 && idx<LEDS_LEFT);
+	_ws2811->channel[0].leds[LEDS_LEFT-idx-1] = ((r & 0x0ff) << 16) | ((g & 0x0ff) << 8) | (b & 0x0ff);
+}
+
+void AmbiPi::setColorTop(uint8_t idx, uint8_t r, uint8_t g, uint8_t b)
+{
+	assert(idx>=0 && idx<LEDS_TOP);
+	_ws2811->channel[0].leds[LEDS_LEFT+idx] = ((r & 0x0ff) << 16) | ((g & 0x0ff) << 8) | (b & 0x0ff);
+}
+
+void AmbiPi::setColorBottom(uint8_t idx, uint8_t r, uint8_t g, uint8_t b)
+{
+	assert(idx>=0 && idx<LEDS_BOTTOM);
+	_ws2811->channel[1].leds[idx] = ((r & 0x0ff) << 16) | ((g & 0x0ff) << 8) | (b & 0x0ff);
+}
+
+void AmbiPi::setColorRight(uint8_t idx, uint8_t r, uint8_t g, uint8_t b)
+{
+	assert(idx>=0 && idx<LEDS_RIGHT);
+	_ws2811->channel[1].leds[LEDS_BOTTOM+LEDS_RIGHT-idx-1] = ((r & 0x0ff) << 16) | ((g & 0x0ff) << 8) | (b & 0x0ff);
+}
+
 void AmbiPi::drawTestPattern(int i, int bri)
 {
 	int r = 255;
@@ -196,7 +220,25 @@ void AmbiPi::drawGUI(cv::Mat frame)
 	if (frame.empty()) {
 		return;
 	}
-	calculateAmbilightFromFrame(frame, 0.95);
+
+	int top   = LEDS_TOP     - 2;
+	int left  = LEDS_LEFT    - 2;
+
+	double dw = frame.cols / (double) (LEDS_TOP  - 2);
+	double dh = frame.rows / (double) (LEDS_LEFT - 2);
+
+	for (int x=0;x<top;x++) {
+		cv::rectangle(frame, cv::Rect(x*dw,0,dw,dh), cv::Scalar(0,0,255),1);
+		cv::rectangle(frame, cv::Rect(x*dw,(left-1)*dh,dw,dh), cv::Scalar(0,0,255),1);
+
+	}
+	for (int y=0;y<left;y++) {
+		cv::rectangle(frame, cv::Rect(0,y*dh,dw,dh), cv::Scalar(0,0,255),1);
+		cv::rectangle(frame, cv::Rect((top-1)*dw,y*dh,dw,dh), cv::Scalar(0,0,255),1);
+
+	}
+
+	cv::resize(frame, frame, cv::Size(), 0.5, 0.5, cv::INTER_LINEAR);
 
 	const int border = 80;
 	cv::Mat out(frame.rows+2*border, frame.cols+2*border, CV_8UC3, cv::Scalar(0, 0, 0));
@@ -207,50 +249,45 @@ void AmbiPi::drawGUI(cv::Mat frame)
 	double fw = out.cols / (double) frame.cols;
 	double fh = out.rows / (double) frame.rows;
 
-	double dwT = frame.cols / (double) LEDS_TOP;
-	double dwB = frame.cols / (double) LEDS_BOTTOM;
-	double dhL = frame.rows / (double) LEDS_LEFT;
-	double dhR = frame.rows / (double) LEDS_RIGHT;
+	double dwT = frame.cols / (double) (LEDS_TOP    - 2);
+	double dwB = frame.cols / (double) (LEDS_BOTTOM - 2);
+	double dhL = frame.rows / (double) (LEDS_LEFT   - 2);
+	double dhR = frame.rows / (double) (LEDS_RIGHT  - 2);
 
-	cv::Point pts[4];
-	for (int x=0; x < LEDS_TOP; x++) {
-		cv::Vec3b colorT = _colorsT.at<cv::Vec3b>(cv::Point(x, 0));
-		pts[1] = cv::Point((x+0)*fw*dwT, 0);
-		pts[2] = cv::Point((x+1)*fw*dwT, 0);
-		pts[3] = cv::Point(ox+(x+1)*dwT, oy);
-		pts[0] = cv::Point(ox+(x+0)*dwT, oy);
-		cv::fillConvexPoly(out, pts, 4, colorT);
-	}
-
-	for (int x=0; x < LEDS_BOTTOM; x++) {
-		cv::Vec3b colorB = _colorsB.at<cv::Vec3b>(cv::Point(x,  0));
-		pts[1] = cv::Point((x+0)*fw*dwB, out.rows-1);
-		pts[2] = cv::Point((x+1)*fw*dwB, out.rows-1);
-		pts[3] = cv::Point(ox+(x+1)*dwB, oy+frame.rows);
-		pts[0] = cv::Point(ox+(x+0)*dwB, oy+frame.rows);
-		cv::fillConvexPoly(out, pts, 4, colorB);
-	}
-
-	for (int y=0; y < LEDS_LEFT; y++) {
-		cv::Vec3b colorL = _colorsL.at<cv::Vec3b>(cv::Point(0, y));
-		pts[1] = cv::Point(0, (y+0)*fh*dhL);
-		pts[2] = cv::Point(0, (y+1)*fh*dhL);
-		pts[3] = cv::Point(ox, oy+(y+1)*dhL);
-		pts[0] = cv::Point(ox, oy+(y+0)*dhL);
-		cv::fillConvexPoly(out, pts, 4, colorL);
-	}
-
-	for (int y=0; y < LEDS_RIGHT; y++) {
-		cv::Vec3b colorR = _colorsR.at<cv::Vec3b>(cv::Point(0, y));
-		pts[1] = cv::Point(out.cols-1, (y+0)*fh*dhR);
-		pts[2] = cv::Point(out.cols-1, (y+1)*fh*dhR);
-		pts[3] = cv::Point(ox+frame.cols, oy+(y+1)*dhR);
-		pts[0] = cv::Point(ox+frame.cols, oy+(y+0)*dhR);
-		cv::fillConvexPoly(out, pts, 4, colorR);
-	}
+	int  oxx = ox - dwT;
+	int  oyy = oy - dhL;
 
 	cv::blur(out, out, cv::Size(fw*(dwT+dwB)/2, fh*(dhL+dhR)/2));
 	frame.copyTo(out(cv::Rect(ox, oy, frame.cols, frame.rows)));
+
+	for (int x=0; x < LEDS_TOP; x++) {
+		uint32_t col = _ws2811->channel[0].leds[LEDS_LEFT+x];
+		cv::Vec3b colorT = cv::Vec3b((col>>0) & 0xff, (col>>8) & 0xff , (col>>16) & 0xff);
+		cv::rectangle(out, cv::Rect(oxx + (x)*dwT,oyy-dhL,dwT,dhL), colorT, -1);
+		cv::rectangle(out, cv::Rect(oxx + (x)*dwT,oyy-dhL,dwT,dhL), cv::Scalar(0,0,255), 1);
+		cv::putText(out, std::to_string(LEDS_LEFT+x), cv::Point(oxx+(x+0.125)*dwT,oyy-1.25*dhL), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.5, cv::Scalar(255,255,255), 1, cv::LINE_AA);
+	}
+	for (int x=0; x < LEDS_BOTTOM; x++) {
+		uint32_t col = _ws2811->channel[1].leds[x];
+		cv::Vec3b colorB = cv::Vec3b((col>>0) & 0xff, (col>>8) & 0xff , (col>>16) & 0xff);
+		cv::rectangle(out, cv::Rect(oxx + (x)*dwT,oyy+LEDS_LEFT*dhL,dwT,dhL), colorB, -1);
+		cv::rectangle(out, cv::Rect(oxx + (x)*dwT,oyy+LEDS_LEFT*dhL,dwT,dhL), cv::Scalar(0,0,255), 1);
+		cv::putText(out, std::to_string(x), cv::Point(oxx+(x+0.125)*dwT,oyy+(LEDS_LEFT+1.5)*dhL), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.5, cv::Scalar(255,255,255), 1, cv::LINE_AA);
+	}
+	for (int y=0; y < LEDS_LEFT; y++) {
+		uint32_t col = _ws2811->channel[0].leds[LEDS_LEFT-y-1];
+		cv::Vec3b colorL = cv::Vec3b((col>>0) & 0xff, (col>>8) & 0xff , (col>>16) & 0xff);
+		cv::rectangle(out, cv::Rect(oxx-dwT, oyy + (y)*dhL, dwT, dhL), colorL, -1);
+		cv::rectangle(out, cv::Rect(oxx-dwT, oyy + (y)*dhL, dwT, dhL), cv::Scalar(0,0,255), 1);
+		cv::putText(out, std::to_string(LEDS_LEFT-y-1), cv::Point(oxx-2*dwT, oyy + (y+0.75)*dhL), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.5, cv::Scalar(255,255,255), 1, cv::LINE_AA);
+	}
+	for (int y=0; y < LEDS_RIGHT; y++) {
+		uint32_t col = _ws2811->channel[1].leds[LEDS_BOTTOM+LEDS_RIGHT-y-1];
+		cv::Vec3b colorL = cv::Vec3b((col>>0) & 0xff, (col>>8) & 0xff , (col>>16) & 0xff);
+		cv::rectangle(out, cv::Rect(oxx+(LEDS_TOP*dwT), oyy + (y)*dhL, dwT, dhL), colorL, -1);
+		cv::rectangle(out, cv::Rect(oxx+(LEDS_TOP*dwT), oyy + (y)*dhL, dwT, dhL), cv::Scalar(0,0,255), 1);
+		cv::putText(out, std::to_string(LEDS_BOTTOM+LEDS_RIGHT-y-1), cv::Point(oxx+((LEDS_TOP+1.5)*dwT), oyy + (y+0.75)*dhL), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.5, cv::Scalar(255,255,255), 1, cv::LINE_AA);
+	}
 
 	cv::imshow("AmbiPi", out);
 }
@@ -258,9 +295,9 @@ void AmbiPi::drawGUI(cv::Mat frame)
 
 cv::Mat AmbiPi::createTestImage(int w, int h)
 {
-	uint8_t r = 0xff;
-	uint8_t g = 0xff;
-	uint8_t b = 0xff;
+//	uint8_t r = 0xff;
+//	uint8_t g = 0xff;
+//	uint8_t b = 0xff;
 	int d = 5;
 	cv::Mat frame = cv::Mat(LEDS_LEFT, LEDS_TOP,   CV_8UC3, cv::Scalar(0,0,0));
 	for  (int y=0; y<LEDS_LEFT; y++) {
@@ -281,58 +318,59 @@ cv::Mat AmbiPi::createTestImage(int w, int h)
 	// imwrite("/home/pi/checkers.png", frame); exit(0);
 	return frame;
 }
+
 void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, double alpha)
 {
-	setColor(0,255,0);
-	double dw = frame.cols / (double) LEDS_TOP;
-	double dh = frame.rows / (double) LEDS_LEFT;
-
+	// setColor(0,255,0);
 	int top   = LEDS_TOP     - 2;
 	int bot   = LEDS_BOTTOM  - 2;
 	int left  = LEDS_LEFT    - 2;
 	int right = LEDS_RIGHT   - 2;
+
+	double dw = frame.cols / (double) top;
+	double dh = frame.rows / (double) left;
+
 	 
 	int interpolation = cv::INTER_LINEAR; // INTER_CUBIC
 	cv::Mat colorsTop, colorsBottom, colorsLeft, colorsRight;
 	cv::resize(frame(cv::Rect(0,0,frame.cols, dh)), colorsTop, cv::Size(top, 1), 0, 0, interpolation);
-	cv::resize(frame(cv::Rect(0, frame.rows-dh, frame.cols, dh)), colorsBottom, cv::Size(bot, 1), 0, 0, interpolation); // INTER_CUBIC
+	cv::resize(frame(cv::Rect(0, frame.rows-dh, frame.cols, dh)), colorsBottom, cv::Size(bot, 1), 0, 0, interpolation);
 	cv::resize(frame(cv::Rect(0,0, dw, frame.rows)), colorsLeft, cv::Size(1, left), 0, 0, interpolation);
-	cv::resize(frame(cv::Rect(frame.cols-dw, 0, dw, frame.rows)), colorsRight, cv::Size(1, right), 0, 0, interpolation); // INTER_CUBIC
+	cv::resize(frame(cv::Rect(frame.cols-dw, 0, dw, frame.rows)), colorsRight, cv::Size(1, right), 0, 0, interpolation);
 	cv::addWeighted(_colorsT, alpha, colorsTop,    1.0 - alpha, 0.0, _colorsT);
 	cv::addWeighted(_colorsB, alpha, colorsBottom, 1.0 - alpha, 0.0, _colorsB);
 	cv::addWeighted(_colorsL, alpha, colorsLeft,   1.0 - alpha, 0.0, _colorsL);
 	cv::addWeighted(_colorsR, alpha, colorsRight,  1.0 - alpha, 0.0, _colorsR);
 	cv::Vec3b c;
-	for (int i=0; i<LEDS_LEFT-1; i++) {
+	for (int i=0; i<LEDS_LEFT-2; i++) {
 		c = _colorsL.at<cv::Vec3b>(cv::Point(0, i));
-		_ws2811->channel[0].leds[-1+LEDS_LEFT-1-i] = ((c[2] & 0xff) << 16) | ((c[1] & 0xff) << 8) | (c[0] & 0xff);
-	}
-	c = _colorsL.at<cv::Vec3b>(cv::Point(0, 0));
-	_ws2811->channel[0].leds[LEDS_LEFT-1] = ((c[2] & 0xff) << 16) | ((c[1] & 0xff) << 8) | (c[0] & 0xff); // LEFT
-	_ws2811->channel[0].leds[LEDS_LEFT-0] = ((c[2] & 0xff) << 16) | ((c[1] & 0xff) << 8) | (c[0] & 0xff); // TOP
-	
-	for (int i=0; i<LEDS_TOP-1; i++) {
-		c = _colorsT.at<cv::Vec3b>(cv::Point(i, 0));
-		_ws2811->channel[0].leds[1+i+LEDS_LEFT] = ((c[2] & 0xff) << 16) | ((c[1] & 0xff) << 8) | (c[0] & 0xff);
-	}
-	c = _colorsT.at<cv::Vec3b>(cv::Point(LEDS_TOP-3, 0));
-	_ws2811->channel[0].leds[LEDS_TOP+LEDS_LEFT-1] = ((c[2] & 0xff) << 16) | ((c[1] & 0xff) << 8) | (c[0] & 0xff);
-	
-	for (int i=0; i<LEDS_BOTTOM-1; i++) {
-		c = _colorsB.at<cv::Vec3b>(cv::Point(i, 0));
-		_ws2811->channel[1].leds[1+i] = ((c[2] & 0xff) << 16) | ((c[1] & 0xff) << 8) | (c[0] & 0xff);
-	}
-	c = _colorsB.at<cv::Vec3b>(cv::Point(0, 0));
-	_ws2811->channel[1].leds[0] = ((c[2] & 0xff) << 16) | ((c[1] & 0xff) << 8) | (c[0] & 0xff);
-	
-	for (int i=0; i<LEDS_RIGHT-1; i++) {
-		c = _colorsR.at<cv::Vec3b>(cv::Point(0, i));
-		_ws2811->channel[1].leds[-2+LEDS_BOTTOM+LEDS_RIGHT-1-i] = ((c[2] & 0xff) << 16) | ((c[1] & 0xff) << 8) | (c[0] & 0xff);
-	}
-	c = _colorsR.at<cv::Vec3b>(cv::Point(0, 0));
-	_ws2811->channel[1].leds[LEDS_BOTTOM+LEDS_RIGHT-2] = ((c[2] & 0xff) << 16) | ((c[1] & 0xff) << 8) | (c[0] & 0xff);
-	_ws2811->channel[1].leds[LEDS_BOTTOM+LEDS_RIGHT-1] = ((c[2] & 0xff) << 16) | ((c[1] & 0xff) << 8) | (c[0] & 0xff);
+		setColorLeft(i+1, c[2], c[1], c[0]);
+	}	
+	setColorLeft(LEDS_LEFT-1, c[2], c[1], c[0]);
+	setColorBottom(0, c[2], c[1], c[0]);
 
-	c = _colorsB.at<cv::Vec3b>(cv::Point(LEDS_BOTTOM-3, 0));
-	_ws2811->channel[1].leds[LEDS_BOTTOM-1] = ((c[2] & 0xff) << 16) | ((c[1] & 0xff) << 8) | (c[0] & 0xff);
+	for (int i=0; i<LEDS_BOTTOM-2; i++) {
+		c = _colorsB.at<cv::Vec3b>(cv::Point(i, 0));
+		setColorBottom(i+1, c[2], c[1], c[0]);
+	}
+	setColorBottom(LEDS_BOTTOM-1, c[2], c[1], c[0]);
+	setColorRight(LEDS_RIGHT-1, c[2], c[1], c[0]);
+
+	for (int i=LEDS_RIGHT-3; i>=0; i--) {
+		c = _colorsR.at<cv::Vec3b>(cv::Point(0, i));
+		setColorRight(i+1, c[2], c[1], c[0]);
+	}
+	setColorRight(0, c[2], c[1], c[0]);
+	setColorTop(LEDS_TOP-1, c[2], c[1], c[0]);
+
+	for (int i=LEDS_TOP-3; i>=0; i--) {
+		c = _colorsT.at<cv::Vec3b>(cv::Point(i, 0));
+		setColorTop(i+1, c[2], c[1], c[0]);
+	}
+	setColorTop( 0, c[2], c[1], c[0]);
+	setColorLeft(0, c[2], c[1], c[0]);
+
+
+
+
 }
