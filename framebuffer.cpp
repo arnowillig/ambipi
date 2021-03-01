@@ -8,6 +8,9 @@
 #include <linux/fb.h>
 #include <fcntl.h>
 
+#if HAVE_DISPMANX
+#include <bcm_host.h>
+#endif
 
 FrameBuffer::FrameBuffer(const char* devicePath) : _devicePath(devicePath)
 {

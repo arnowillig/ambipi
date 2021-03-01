@@ -14,16 +14,7 @@
 #ifdef _DEVEL_
 #define TEST_VIDEO "/home/akw/Downloads/big_buck_bunny_1080p_surround.avi"
 #else
-// #define TEST_VIDEO "/home/pi/Videos/big_buck_bunny_1080p_surround.avi"
-// #define TEST_VIDEO "/home/pi/Videos/Ambilight-Color-Wheel-Test-2.mp4"
-#define TEST_VIDEO "/home/pi/Videos/Avatar.Ambitest.mkv"
-
-#if HAVE_DISPMANX
-#include <bcm_host.h>
-// void drawToDispManX(cv::Mat frame);
-
-#endif
-
+#define TEST_VIDEO "/home/pi/Videos/big_buck_bunny_1080p_surround.avi"
 #endif
 
 using namespace std;
