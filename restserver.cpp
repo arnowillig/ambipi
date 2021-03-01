@@ -5,6 +5,8 @@
 
 RESTServer::RESTServer(AmbiPi* ambiPi) : _ambiPi(ambiPi)
 {
+	Rest::Routes::Get(_router, "/api/alpha/:alpha",	Rest::Routes::bind(&RESTServer::setAlpha, this));
+	Rest::Routes::Get(_router, "/api/gamma/:gamma",	Rest::Routes::bind(&RESTServer::setGamma, this));
 	Rest::Routes::Get(_router, "/api/bri/:bri",	Rest::Routes::bind(&RESTServer::setBrightness, this));
 	Rest::Routes::Get(_router, "/api/mode/:mode",	Rest::Routes::bind(&RESTServer::setMode, this));
 	Rest::Routes::Get(_router, "/api/col/:r/:g/:b",	Rest::Routes::bind(&RESTServer::setColor, this));
@@ -18,6 +20,22 @@ void RESTServer::start(int port)
 	server.init(opts);
 	server.setHandler(_router.handler());
 	server.serve();
+}
+
+void RESTServer::setAlpha(const Rest::Request &request, Http::ResponseWriter response)
+{
+	double alpha = request.param(":alpha").as<double>();
+	std::string resp = std::to_string(alpha) + "\n";
+	response.send(Http::Code::Ok, resp);
+	_ambiPi->setAlpha(alpha);
+}
+
+void RESTServer::setGamma(const Rest::Request &request, Http::ResponseWriter response)
+{
+	double gamma = request.param(":gamma").as<double>();
+	std::string resp = std::to_string(gamma) + "\n";
+	response.send(Http::Code::Ok, resp);
+	_ambiPi->setGamma(gamma);
 }
 
 void RESTServer::setBrightness(const Rest::Request& request, Http::ResponseWriter response)

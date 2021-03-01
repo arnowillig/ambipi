@@ -1,8 +1,9 @@
 #ifndef AMBIPI_H
 #define AMBIPI_H
 
-#include "rpi_ws281x/ws2811.h"
 #include <opencv2/opencv.hpp>
+
+struct ws2811_t;
 
 class AmbiPi
 {
@@ -25,6 +26,8 @@ public:
 
 	bool init(double gamma);
 	void setBrightness(uint8_t bri);
+	void setAlpha(double alpha);
+	void setGamma(double gamma);
 	void setColor(uint8_t r, uint8_t g, uint8_t  b);
 	void setColorLeft(uint8_t r, uint8_t g, uint8_t  b);
 	void setColorTop(uint8_t r, uint8_t g, uint8_t  b);
@@ -43,7 +46,7 @@ public:
 #ifdef _DEVEL_
 	void drawGUI(cv::Mat frame);
 #endif
-	void calculateAmbilightFromFrame(cv::Mat frame, double alpha);
+	void calculateAmbilightFromFrame(cv::Mat frame);
 	void clear();
 	void render();
 	cv::Mat createTestImage(int w, int h);
@@ -54,6 +57,7 @@ private:
 	cv::Mat _colorsL;
 	cv::Mat _colorsR;
 	Mode _mode;
+	double _alpha;
 
 };
 
