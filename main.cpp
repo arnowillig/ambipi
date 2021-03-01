@@ -21,7 +21,9 @@
 // #define TEST_VIDEO "/home/pi/Videos/Ambilight-Color-Wheel-Test-2.mp4"
 #define TEST_VIDEO "/home/pi/Videos/Avatar.Ambitest.mkv"
 
+#if HAVE_DISPMANX
 #include <bcm_host.h>
+#endif
 
 #endif
 
@@ -160,8 +162,7 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
-#ifndef _DEVEL_
-
+#if HAVE_DISPMANX
 int dispmanx(void)
 {
 	bcm_host_init();
