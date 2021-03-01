@@ -25,7 +25,7 @@ CFLAGS += -DHAVE_DISPMANX=$(HAVE_DISPMANX)
 all: $(TARGET)
 
 %.o: %.cpp $(HEADERS)
-	@echo "Comiling $@ ..."
+	@echo "Compiling $@ ..."
 	@$(CXX) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 $(TARGET): rpi_ws281x/build/libws2811.a pistache/build/src/libpistache.a $(OBJECTS)
