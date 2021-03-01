@@ -13,7 +13,7 @@ CFLAGS += -Wfatal-errors -Wno-deprecated-declarations
 
 TARGET = ambipi
 
-ifneq ("$(wildcard $(/opt/vc/lib/libbcm_host.so))","")
+ifneq ("$(wildcard /opt/vc/lib/libbcm_host.so)","")
 	HAVE_DISPMANX = 1
 	LIBS += /opt/vc/lib/libbcm_host.so
 else
@@ -26,7 +26,7 @@ all: $(TARGET)
 
 %.o: %.cpp $(HEADERS)
 	@echo "Compiling $@ ..."
-	@$(CXX) $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(CXX) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 $(TARGET): rpi_ws281x/build/libws2811.a pistache/build/src/libpistache.a $(OBJECTS)
 	@echo "Linking $@ ..."
