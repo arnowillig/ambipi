@@ -66,7 +66,7 @@ int main(int argc, char *argv[])
 #endif
 	
 	AmbiPi ambiPi;
-	if (!ambiPi.init(1.0)) {
+	if (!ambiPi.init(1.7)) {
 		return 1;
 	}
 
@@ -104,6 +104,22 @@ int main(int argc, char *argv[])
 			ambiPi.drawTestPattern(i, 128);
 			break;
 		case AmbiPi::AmbiLight:
+			frame = fb.grabFrame();
+			sleep = 25;
+			/*
+			static  bool test = false;
+			if (!test) {
+				cv::Mat out;
+				cv::cvtColor(frame, out, cv::COLOR_RGB2BGR);
+				cv::imwrite("/home/pi/test.png", out);
+				test = true;
+			}
+			*/
+			if (!frame.empty()) {
+				ambiPi.calculateAmbilightFromFrame(frame,true);
+			}
+			break;
+		case AmbiPi::AmbiLight2:
 			if (!capture) {
 				capture = new cv::VideoCapture(testVideo);
 			}

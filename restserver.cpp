@@ -7,9 +7,11 @@ RESTServer::RESTServer(AmbiPi* ambiPi) : _ambiPi(ambiPi)
 {
 	Rest::Routes::Get(_router, "/api/alpha/:alpha",	Rest::Routes::bind(&RESTServer::setAlpha, this));
 	Rest::Routes::Get(_router, "/api/gamma/:gamma",	Rest::Routes::bind(&RESTServer::setGamma, this));
+	Rest::Routes::Get(_router, "/api/bri",		Rest::Routes::bind(&RESTServer::getBrightness, this));
 	Rest::Routes::Get(_router, "/api/bri/:bri",	Rest::Routes::bind(&RESTServer::setBrightness, this));
 	Rest::Routes::Get(_router, "/api/mode/:mode",	Rest::Routes::bind(&RESTServer::setMode, this));
 	Rest::Routes::Get(_router, "/api/col/:r/:g/:b",	Rest::Routes::bind(&RESTServer::setColor, this));
+	Rest::Routes::Get(_router, "/api/leds",		Rest::Routes::bind(&RESTServer::getLEDs, this));
 }
 
 void RESTServer::start(int port)
@@ -20,6 +22,12 @@ void RESTServer::start(int port)
 	server.init(opts);
 	server.setHandler(_router.handler());
 	server.serve();
+}
+
+void RESTServer::getLEDs(const Rest::Request& request, Http::ResponseWriter response)
+{
+	std::string resp = ""; // std::to_string(alpha) + "\n";
+	response.send(Http::Code::Ok, resp);
 }
 
 void RESTServer::setAlpha(const Rest::Request &request, Http::ResponseWriter response)
@@ -41,14 +49,23 @@ void RESTServer::setGamma(const Rest::Request &request, Http::ResponseWriter res
 void RESTServer::setBrightness(const Rest::Request& request, Http::ResponseWriter response)
 {
 	int bri = request.param(":bri").as<int>();
+	if (bri<=100) {
+		bri = (bri * 255) / 100;
+	}
 	std::cout << "BRI:" << bri << std::endl;
 
-	char buf[16];
-	sprintf(buf,"%d",bri);
 	std::string resp = std::to_string(bri);
 	resp.append("\n");
 	response.send(Http::Code::Ok, resp);
 	_ambiPi->setBrightness(bri);
+}
+
+void RESTServer::getBrightness(const Rest::Request& request, Http::ResponseWriter response)
+{
+	int bri = (_ambiPi->getBrightness() * 100) / 255;
+
+	std::string resp = std::to_string(bri) + "\n";
+	response.send(Http::Code::Ok, resp);
 }
 
 void RESTServer::setColor(const Rest::Request& request, Http::ResponseWriter response)
@@ -69,6 +86,8 @@ void RESTServer::setMode(const Rest::Request& request, Http::ResponseWriter resp
 	response.send(Http::Code::Ok, resp);
 	if (mode=="off") {
 		_ambiPi->setMode(AmbiPi::Off);
+	} else if (mode=="ambilight") {
+		_ambiPi->setMode(AmbiPi::AmbiLight);
 	} else if (mode=="white") {
 		_ambiPi->setMode(AmbiPi::White);
 	} else if (mode=="rainbow") {

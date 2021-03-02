@@ -14,7 +14,14 @@ public:
 		Color,
 		Rainbow,
 		TestPattern,
-		AmbiLight
+		AmbiLight,
+		AmbiLight2
+	};
+	enum Side {
+		Left = 0,
+		Top,
+		Right,
+		Bottom
 	};
 
 public:
@@ -28,6 +35,7 @@ public:
 	void setBrightness(uint8_t bri);
 	void setAlpha(double alpha);
 	void setGamma(double gamma);
+	uint8_t getBrightness() const;
 	void setColor(uint8_t r, uint8_t g, uint8_t  b);
 	void setColorLeft(uint8_t r, uint8_t g, uint8_t  b);
 	void setColorTop(uint8_t r, uint8_t g, uint8_t  b);
@@ -46,7 +54,7 @@ public:
 #ifdef _DEVEL_
 	void drawGUI(cv::Mat frame);
 #endif
-	void calculateAmbilightFromFrame(cv::Mat frame);
+	void calculateAmbilightFromFrame(cv::Mat frame, bool bgr=false);
 	void clear();
 	void render();
 	cv::Mat createTestImage(int w, int h);

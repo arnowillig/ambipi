@@ -22,8 +22,10 @@ public:
 	void setAlpha(const Rest::Request &request, Http::ResponseWriter response);
 	void setGamma(const Rest::Request &request, Http::ResponseWriter response);
 	void setBrightness(const Rest::Request &request, Http::ResponseWriter response);
+	void getBrightness(const Rest::Request &request, Http::ResponseWriter response);
 	void setColor(const Rest::Request &request, Http::ResponseWriter response);
 	void setMode(const Rest::Request &request, Http::ResponseWriter response);
+	void getLEDs(const Rest::Request &request, Http::ResponseWriter response);
 };
 
 #endif // RESTSERVER_H

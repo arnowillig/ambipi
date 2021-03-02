@@ -82,7 +82,11 @@ void AmbiPi::setBrightness(uint8_t bri)
 {
 	_ws2811->channel[0].brightness	= bri;
 	_ws2811->channel[1].brightness	= bri;
+}
 
+uint8_t AmbiPi::getBrightness() const
+{
+	return _ws2811->channel[0].brightness;
 }
 
 void AmbiPi::setAlpha(double alpha)
@@ -336,7 +340,7 @@ cv::Mat AmbiPi::createTestImage(int w, int h)
 	return frame;
 }
 
-void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame)
+void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
 {
 	// setColor(0,255,0);
 	int top   = LEDS_TOP     - 2;
@@ -359,35 +363,41 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame)
 	cv::addWeighted(_colorsL, _alpha, colorsLeft,   1.0 - _alpha, 0.0, _colorsL);
 	cv::addWeighted(_colorsR, _alpha, colorsRight,  1.0 - _alpha, 0.0, _colorsR);
 	cv::Vec3b c;
+	int r,g,b;
+	if (bgr) {
+		r = 0;
+		g = 1;
+		b = 2;
+	} else {
+		r = 2;
+		g = 1;
+		b = 0;
+	}
 	for (int i=0; i<LEDS_LEFT-2; i++) {
 		c = _colorsL.at<cv::Vec3b>(cv::Point(0, i));
-		setColorLeft(i+1, c[2], c[1], c[0]);
+		setColorLeft(i+1, c[r], c[g], c[b]);
 	}	
-	setColorLeft(LEDS_LEFT-1, c[2], c[1], c[0]);
-	setColorBottom(0, c[2], c[1], c[0]);
+	setColorLeft(LEDS_LEFT-1, c[r], c[g], c[b]);
+	setColorBottom(0, c[r], c[g], c[b]);
 
 	for (int i=0; i<LEDS_BOTTOM-2; i++) {
 		c = _colorsB.at<cv::Vec3b>(cv::Point(i, 0));
-		setColorBottom(i+1, c[2], c[1], c[0]);
+		setColorBottom(i+1, c[r], c[g], c[b]);
 	}
-	setColorBottom(LEDS_BOTTOM-1, c[2], c[1], c[0]);
-	setColorRight(LEDS_RIGHT-1, c[2], c[1], c[0]);
+	setColorBottom(LEDS_BOTTOM-1, c[r], c[g], c[b]);
+	setColorRight(LEDS_RIGHT-1, c[r], c[g], c[b]);
 
 	for (int i=LEDS_RIGHT-3; i>=0; i--) {
 		c = _colorsR.at<cv::Vec3b>(cv::Point(0, i));
-		setColorRight(i+1, c[2], c[1], c[0]);
+		setColorRight(i+1, c[r], c[g], c[b]);
 	}
-	setColorRight(0, c[2], c[1], c[0]);
-	setColorTop(LEDS_TOP-1, c[2], c[1], c[0]);
+	setColorRight(0, c[r], c[g], c[b]);
+	setColorTop(LEDS_TOP-1, c[r], c[g], c[b]);
 
 	for (int i=LEDS_TOP-3; i>=0; i--) {
 		c = _colorsT.at<cv::Vec3b>(cv::Point(i, 0));
-		setColorTop(i+1, c[2], c[1], c[0]);
+		setColorTop(i+1, c[r], c[g], c[b]);
 	}
-	setColorTop( 0, c[2], c[1], c[0]);
-	setColorLeft(0, c[2], c[1], c[0]);
-
-
-
-
+	setColorTop( 0, c[r], c[g], c[b]);
+	setColorLeft(0, c[r], c[g], c[b]);
 }

@@ -8,12 +8,18 @@
 #include <linux/fb.h>
 #include <fcntl.h>
 
-#if HAVE_DISPMANX
-#include <bcm_host.h>
+#ifndef ALIGN_TO_16
+#define ALIGN_TO_16(x)  ((x + 15) & ~15)
 #endif
+
+DISPMANX_DISPLAY_HANDLE_T display;
 
 FrameBuffer::FrameBuffer(const char* devicePath) : _devicePath(devicePath)
 {
+#if HAVE_DISPMANX
+	bcm_host_init();
+	display = vc_dispmanx_display_open(0);
+#endif
 	struct fb_var_screeninfo screen_info;
 	int fd = -1;
 	fd = open(devicePath, O_RDWR);
@@ -29,6 +35,9 @@ FrameBuffer::FrameBuffer(const char* devicePath) : _devicePath(devicePath)
 FrameBuffer::~FrameBuffer()
 {
 	clear();
+#if HAVE_DISPMANX
+	vc_dispmanx_display_close(display);
+#endif
 }
 
 void FrameBuffer::clear()
@@ -74,10 +83,41 @@ void FrameBuffer::drawFrame(cv::Mat frame)
 	}
 }
 
-
-
-
 #if HAVE_DISPMANX
+
+cv::Mat FrameBuffer::grabFrame() const
+{
+	int div = 8;
+	int iw = 1920 / div; // info.width
+	int ih = 1080 / div; // info.height
+	cv::Mat frame = cv::Mat(ih, iw, CV_8UC3, cv::Scalar(64,64,64));
+
+	// display = vc_dispmanx_display_open(0);
+
+	// DISPMANX_MODEINFO_T info;
+	// int ret = vc_dispmanx_display_get_info(display, &info);
+	// printf("Display is %d x %d\n", info.width, info.height);
+	
+	int32_t dmxPitch = 3 * ALIGN_TO_16(iw);
+
+	uint32_t vc_image_ptr;
+	DISPMANX_RESOURCE_HANDLE_T resource = vc_dispmanx_resource_create(VC_IMAGE_RGB888, iw, ih, &vc_image_ptr);
+
+	VC_RECT_T rect;
+	vc_dispmanx_snapshot(display, resource, DISPMANX_NO_ROTATE);
+	vc_dispmanx_rect_set(&rect, 0, 0, iw, ih);
+	vc_dispmanx_resource_read_data(resource, &rect, frame.data, dmxPitch);
+
+	vc_dispmanx_resource_delete(resource);
+	// vc_dispmanx_display_close(display);
+	
+	// cv::cvtColor(frame, frame, cv::COLOR_RGB2BGR);
+
+	int bx = 44 / div; // 290 (Sega)
+	int by = 44 / div;
+	return frame(cv::Rect(bx,by,iw-2*bx,ih-2*by)).clone();
+}
+
 
 void drawToDispManX(cv::Mat frame)
 {
@@ -141,11 +181,14 @@ void drawToDispManX(cv::Mat frame)
 	assert( ret == 0 );
 }
 
+
+
 int dispmanx(void)
 {
+	
 	bcm_host_init();
 
-	DISPMANX_DISPLAY_HANDLE_T display = vc_dispmanx_display_open(0);
+	// DISPMANX_DISPLAY_HANDLE_T display = vc_dispmanx_display_open(0);
 
 	DISPMANX_MODEINFO_T info;
 	int ret = vc_dispmanx_display_get_info(display, &info);
@@ -153,7 +196,7 @@ int dispmanx(void)
 	printf("Display is %d x %d\n", info.width, info.height );
 
 	void* image = calloc( 1, info.width * 3 * info.height);
-
+	
 	uint32_t vc_image_ptr;
 	DISPMANX_RESOURCE_HANDLE_T resource = vc_dispmanx_resource_create(VC_IMAGE_RGB888, info.width, info.height, &vc_image_ptr);
 
@@ -170,7 +213,7 @@ int dispmanx(void)
 
 	ret = vc_dispmanx_resource_delete(resource);
 	assert( ret == 0 );
-	ret = vc_dispmanx_display_close(display);
+//	ret = vc_dispmanx_display_close(display);
 	assert( ret == 0 );
 
 	return 0;
