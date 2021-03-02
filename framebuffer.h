@@ -2,6 +2,7 @@
 #define FRAMEBUFFER_H
 
 #include <stdint.h>
+#include <mutex>
 #include <opencv2/opencv.hpp>
 
 #if HAVE_DISPMANX
@@ -15,6 +16,7 @@ class FrameBuffer
 	uint32_t _xres_virtual;
 	uint32_t _yres_virtual;
 	const char* _devicePath;
+	mutable std::mutex _mutex;
 #if HAVE_DISPMANX
 	DISPMANX_DISPLAY_HANDLE_T _display;
 #endif

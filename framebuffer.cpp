@@ -89,6 +89,7 @@ cv::Mat FrameBuffer::grabFrame(int div, bool rgb) const
 	cv::Mat frame = cv::Mat(ih, iw, CV_8UC3, cv::Scalar(64,64,64));
 
 #if HAVE_DISPMANX
+	_mutex.lock();
 	int32_t dmxPitch = 3 * ALIGN_TO_16(iw);
 	uint32_t vc_image_ptr;
 	VC_RECT_T rect;
@@ -97,6 +98,7 @@ cv::Mat FrameBuffer::grabFrame(int div, bool rgb) const
 	vc_dispmanx_rect_set(&rect, 0, 0, iw, ih);
 	vc_dispmanx_resource_read_data(resource, &rect, frame.data, dmxPitch);
 	vc_dispmanx_resource_delete(resource);
+	_mutex.unlock();
 #endif
 
 	if (rgb) {
