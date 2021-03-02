@@ -3,6 +3,8 @@
 
 #include <opencv2/opencv.hpp>
 
+class FrameBuffer;
+
 struct ws2811_t;
 
 class AmbiPi
@@ -27,6 +29,9 @@ public:
 public:
 	AmbiPi();
 	virtual ~AmbiPi();
+	
+	void setFrameBuffer(FrameBuffer* fb) { _fb = fb; }
+	FrameBuffer* frameBuffer() const { return _fb; }
 	
 	void setMode(Mode m) { _mode = m; }
 	Mode mode() const { return _mode; }
@@ -60,6 +65,7 @@ public:
 	cv::Mat createTestImage(int w, int h);
 private:
 	ws2811_t* _ws2811;
+	FrameBuffer* _fb;
 	cv::Mat _colorsT;
 	cv::Mat _colorsB;
 	cv::Mat _colorsL;

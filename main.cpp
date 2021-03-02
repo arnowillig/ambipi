@@ -69,6 +69,7 @@ int main(int argc, char *argv[])
 	if (!ambiPi.init(1.7)) {
 		return 1;
 	}
+	ambiPi.setFrameBuffer(&fb);
 
 	RESTServer server(&ambiPi);
 	std::thread restThread(&restServer, &server);
@@ -106,15 +107,12 @@ int main(int argc, char *argv[])
 		case AmbiPi::AmbiLight:
 			frame = fb.grabFrame();
 			sleep = 25;
-			/*
-			static  bool test = false;
-			if (!test) {
+			if (screenshot) {
 				cv::Mat out;
 				cv::cvtColor(frame, out, cv::COLOR_RGB2BGR);
-				cv::imwrite("/home/pi/test.png", out);
-				test = true;
+				cv::imwrite("/home/pi/screenshot.png", out);
+				screenshot = false;
 			}
-			*/
 			if (!frame.empty()) {
 				ambiPi.calculateAmbilightFromFrame(frame,true);
 			}

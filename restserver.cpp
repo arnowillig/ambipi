@@ -1,17 +1,19 @@
 #include "restserver.h"
+#include "framebuffer.h"
 #include <algorithm>
 
 
 
 RESTServer::RESTServer(AmbiPi* ambiPi) : _ambiPi(ambiPi)
 {
-	Rest::Routes::Get(_router, "/api/alpha/:alpha",	Rest::Routes::bind(&RESTServer::setAlpha, this));
-	Rest::Routes::Get(_router, "/api/gamma/:gamma",	Rest::Routes::bind(&RESTServer::setGamma, this));
-	Rest::Routes::Get(_router, "/api/bri",		Rest::Routes::bind(&RESTServer::getBrightness, this));
-	Rest::Routes::Get(_router, "/api/bri/:bri",	Rest::Routes::bind(&RESTServer::setBrightness, this));
-	Rest::Routes::Get(_router, "/api/mode/:mode",	Rest::Routes::bind(&RESTServer::setMode, this));
-	Rest::Routes::Get(_router, "/api/col/:r/:g/:b",	Rest::Routes::bind(&RESTServer::setColor, this));
-	Rest::Routes::Get(_router, "/api/leds",		Rest::Routes::bind(&RESTServer::getLEDs, this));
+	Rest::Routes::Get(_router, "/api/alpha/:alpha",		Rest::Routes::bind(&RESTServer::setAlpha, this));
+	Rest::Routes::Get(_router, "/api/gamma/:gamma",		Rest::Routes::bind(&RESTServer::setGamma, this));
+	Rest::Routes::Get(_router, "/api/bri",			Rest::Routes::bind(&RESTServer::getBrightness, this));
+	Rest::Routes::Get(_router, "/api/bri/:bri",		Rest::Routes::bind(&RESTServer::setBrightness, this));
+	Rest::Routes::Get(_router, "/api/mode/:mode",		Rest::Routes::bind(&RESTServer::setMode, this));
+	Rest::Routes::Get(_router, "/api/col/:r/:g/:b",		Rest::Routes::bind(&RESTServer::setColor, this));
+	Rest::Routes::Get(_router, "/api/leds",			Rest::Routes::bind(&RESTServer::getLEDs, this));
+	Rest::Routes::Get(_router, "/api/screenshot.jpg",	Rest::Routes::bind(&RESTServer::getScreenshot, this));
 }
 
 void RESTServer::start(int port)
@@ -22,6 +24,19 @@ void RESTServer::start(int port)
 	server.init(opts);
 	server.setHandler(_router.handler());
 	server.serve();
+}
+
+void RESTServer::getScreenshot(const Rest::Request& request, Http::ResponseWriter response)
+{
+	cv::Mat frame = _ambiPi->frameBuffer()->grabFrame(2, true);
+	
+	std::vector<uchar> buf;
+	std::vector<int> param(2);
+	param[0] = cv::IMWRITE_JPEG_QUALITY;
+	param[1] = 95;
+	cv::imencode(".jpg", frame, buf, param);
+	response.send(Http::Code::Ok, std::string{buf.begin(), buf.end()}, MIME(Image, Jpeg));
+	// todo ..
 }
 
 void RESTServer::getLEDs(const Rest::Request& request, Http::ResponseWriter response)

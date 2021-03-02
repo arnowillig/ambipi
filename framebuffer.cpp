@@ -85,9 +85,9 @@ void FrameBuffer::drawFrame(cv::Mat frame)
 
 #if HAVE_DISPMANX
 
-cv::Mat FrameBuffer::grabFrame() const
+cv::Mat FrameBuffer::grabFrame(int div, bool rgb) const
 {
-	int div = 8;
+	// int div = 8;
 	int iw = 1920 / div; // info.width
 	int ih = 1080 / div; // info.height
 	cv::Mat frame = cv::Mat(ih, iw, CV_8UC3, cv::Scalar(64,64,64));
@@ -111,7 +111,9 @@ cv::Mat FrameBuffer::grabFrame() const
 	vc_dispmanx_resource_delete(resource);
 	// vc_dispmanx_display_close(display);
 	
-	// cv::cvtColor(frame, frame, cv::COLOR_RGB2BGR);
+	if (rgb) {
+		cv::cvtColor(frame, frame, cv::COLOR_RGB2BGR);
+	}
 
 	int bx = 44 / div; // 290 (Sega)
 	int by = 44 / div;
