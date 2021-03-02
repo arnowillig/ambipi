@@ -42,7 +42,7 @@ static void signalHandler(int signo)
 
 static void restServer(RESTServer* restServer)
 {
-	restServer->start(9080);
+	restServer->start(80);
 }
 
 int main(int argc, char *argv[])
@@ -113,7 +113,9 @@ int main(int argc, char *argv[])
 #else
 			frame = fb.grabFrame(8);
 #endif
+			frame = ambiPi.cropBorders(frame);
 			sleep = 25;
+			// sleep = 50;
 			if (screenshot) {
 				cv::Mat out;
 				cv::cvtColor(frame, out, cv::COLOR_RGB2BGR);
@@ -150,6 +152,7 @@ int main(int argc, char *argv[])
 		default:
 			break;
 		}
+		lastMode = ambiPi.mode();
 #ifdef _GUI_
 		ambiPi.drawGUI(frame);
 #else

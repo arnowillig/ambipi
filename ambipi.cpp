@@ -352,6 +352,58 @@ cv::Mat AmbiPi::createTestImage(int w, int h)
 	return frame;
 }
 
+cv::Mat AmbiPi::cropBorders(cv::Mat frame) const
+{
+	int minX = 0;
+	int minY = 0;
+	int maxX = frame.cols-1;
+	int maxY = frame.rows-1;
+	
+	int i;
+	
+	cv::Mat gray;
+	cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
+	
+	for (i=0; i<gray.cols/2;i++) {
+		if (cv::countNonZero(gray(cv::Rect(i,0,1,gray.rows))) > 0) {
+			break;
+		}
+	}
+	minX = i;
+
+	for (i=gray.cols-1; i>gray.cols/2;i--) {
+		if (cv::countNonZero(gray(cv::Rect(i,0,1,gray.rows))) > 0) {
+			break;
+		}
+	}
+	maxX = i;
+
+	for (i=0; i<gray.rows/2;i++) {
+		if (cv::countNonZero(gray(cv::Rect(0,i,gray.cols,1))) > 0) {
+			break;
+		}
+	}
+	minY = i;
+
+	for (i=gray.rows-1; i>gray.rows/2;i--) {
+		if (cv::countNonZero(gray(cv::Rect(0,i,gray.cols,1))) > 0) {
+			break;
+		}
+	}
+	maxY = i;
+	
+	// fprintf(stderr, "cropBorder(%d,%d %dx%d)\n", minX, minY, maxX-minX+1,maxY-minY+1);
+
+	cv::Mat cropped = frame(cv::Rect(minX,minY,maxX+1-minX,maxY+1-minY));
+	cv::Mat out;
+	cv::resize(cropped.clone(), out, cv::Size(frame.cols, frame.rows), 0.5, 0.5, cv::INTER_NEAREST);
+	
+	cropped.copyTo(out(cv::Rect(minX,minY,maxX+1-minX,maxY+1-minY)));
+	return out;
+
+	// return frame(cv::Rect(minX,minY,maxX+1-minX,maxY+1-minY));
+}
+
 void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
 {
 	// setColor(0,255,0);

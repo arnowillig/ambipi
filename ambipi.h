@@ -66,6 +66,7 @@ public:
 #ifdef _GUI_
 	void drawGUI(cv::Mat frame);
 #endif
+	cv::Mat cropBorders(cv::Mat frame) const;
 	void calculateAmbilightFromFrame(cv::Mat frame, bool bgr=false);
 	void clear();
 	void render();

@@ -1,26 +1,23 @@
 <html>
-<script>
-var newImage = new Image();
-
-function updateImage() {
-    if (newImage.complete) {
-           newImage.src = document.getElementById("img").src;
-           var temp = newImage.src;
-           document.getElementById("img").src = newImage.src;
-           newImage = new Image();
-           newImage.src = temp + "?" + new Date().getTime();
-    }
-    setTimeout(updateImage, 250);
-};
-</script>
-<body onload="updateImage();">
+<head>
+ <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+ <script src="/static/ambipi.js"></script>
+</head>
+<body> <!-- onload="updateImage();">-->
 <h1>AtariPi</h1>
 <hr />
 <img id="img" src="/api/screenshot.jpg" />
 <hr />
 <div>
-    <input type="color" id="color" name="color" value="#e66465" onchange="alert('Hahn');" />
-    <label for="head">AmbiLight Color</label>
+    <input type="color" id="color" name="color" value="#e66465" />
+    <label for="color">AmbiLight Color</label>
+</div>
+<div>
+    <input type="button" id="ambilight" value="AmbiLight" />
+    <input type="button" id="rainbow" value="Rainbow" />
+    <input type="button" id="testpattern" value="Test pattern" />
+    <input type="button" id="white"   value="Warm White" />
+    <input type="button" id="off"     value="Off" />
 </div>
 <ul>
 <li><a href="http://ataripi.fritz.box:1880/">NodeRED</a></li>

@@ -41,6 +41,7 @@ void RESTServer::start(int port)
 
 void RESTServer::getStaticHTML(const Rest::Request& request, Http::ResponseWriter response)
 {
+	std::cout << "REST: " << request.resource() << std::endl;
 	if (request.resource()=="/" || request.resource()=="/index.html") {
 		Http::serveFile(response, _basePath + "/index.html");
 		return;
@@ -56,6 +57,7 @@ void RESTServer::getScreenshot(const Rest::Request& request, Http::ResponseWrite
 {
 	(void) request;
 	cv::Mat frame = _ambiPi->frameBuffer()->grabFrame(2, true);
+	frame = _ambiPi->cropBorders(frame);
 	
 	std::vector<uchar> buf;
 	std::vector<int> param(2);
