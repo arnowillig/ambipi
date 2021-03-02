@@ -14,6 +14,8 @@ RESTServer::RESTServer(AmbiPi* ambiPi) : _ambiPi(ambiPi)
 	Rest::Routes::Get(_router, "/api/col/:r/:g/:b",		Rest::Routes::bind(&RESTServer::setColor, this));
 	Rest::Routes::Get(_router, "/api/leds",			Rest::Routes::bind(&RESTServer::getLEDs, this));
 	Rest::Routes::Get(_router, "/api/screenshot.jpg",	Rest::Routes::bind(&RESTServer::getScreenshot, this));
+	Rest::Routes::Get(_router, "/index.html",		Rest::Routes::bind(&RESTServer::getStaticHTML, this));
+	Rest::Routes::Get(_router, "/",				Rest::Routes::bind(&RESTServer::getStaticHTML, this));
 }
 
 void RESTServer::start(int port)
@@ -24,6 +26,11 @@ void RESTServer::start(int port)
 	server.init(opts);
 	server.setHandler(_router.handler());
 	server.serve();
+}
+
+void RESTServer::getStaticHTML(const Rest::Request& request, Http::ResponseWriter response)
+{
+ 	Http::serveFile(response, "/home/pi/src/ambipi/html/index.html");
 }
 
 void RESTServer::getScreenshot(const Rest::Request& request, Http::ResponseWriter response)

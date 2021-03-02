@@ -27,6 +27,7 @@ public:
 	void setMode(const Rest::Request &request, Http::ResponseWriter response);
 	void getLEDs(const Rest::Request &request, Http::ResponseWriter response);
 	void getScreenshot(const Rest::Request& request, Http::ResponseWriter response);
+	void getStaticHTML(const Rest::Request& request, Http::ResponseWriter response);
 };
 
 #endif // RESTSERVER_H

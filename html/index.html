@@ -1,0 +1,21 @@
+<html>
+<script>
+var newImage = new Image();
+
+function updateImage() {
+    if (newImage.complete) {
+           newImage.src = document.getElementById("img").src;
+           var temp = newImage.src;
+           document.getElementById("img").src = newImage.src;
+           newImage = new Image();
+           newImage.src = temp + "?" + new Date().getTime();
+    }
+    setTimeout(updateImage, 1000);
+};
+</script>
+<body onload="updateImage();">
+<h1>AtariPi</h1>
+<hr />
+<img id="img" src="/api/screenshot.jpg" />
+</body>
+</html>

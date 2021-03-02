@@ -49,4 +49,6 @@ distclean: clean
 run:	ambipi
 	sudo ./ambipi
 
+restart:
+	sudo service ambipi restart
 	

@@ -1,0 +1,32 @@
+[Unit]
+Description=AmbiPi Daemon
+Requires=multi-user.target
+#After=time-sync.target
+After=multi-user.target
+After=network-online.target
+#After=mariadb.service
+#After=systemd-hostnamed.service
+#After=systemd-timesyncd.service
+#After=systemd-time-wait-sync.service
+
+AllowIsolate=yes
+
+#Type=idle
+#After=systemd-user-sessions.service plymouth-quit-wait.service
+#After=rc-local.service
+#Before=getty.target
+#IgnoreOnIsolate=yes
+ 
+[Service]
+ExecStart=/usr/local/bin/ambipi
+ExecReload=/bin/kill -s HUP $MAINPID
+ExecStop=/bin/kill -s TERM $MAINPID
+WorkingDirectory=/home/pi/src/ambipi
+StandardOutput=inherit
+StandardError=inherit
+Restart=always
+User=root
+ 
+[Install]
+WantedBy=multi-user.target
+
