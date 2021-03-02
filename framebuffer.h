@@ -23,9 +23,7 @@ public:
 	~FrameBuffer();
 	void clear();
 	void drawFrame(cv::Mat frame);
-#if HAVE_DISPMANX
 	cv::Mat grabFrame(int div=8, bool rgb=false) const;
-#endif
 };
 
 #endif // FRAMEBUFFER_H

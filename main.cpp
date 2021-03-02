@@ -11,7 +11,7 @@
 #include "restserver.h"
 #include "framebuffer.h"
 
-#ifdef _DEVEL_
+#ifdef _GUI_
 #define TEST_VIDEO "/home/akw/Downloads/big_buck_bunny_1080p_surround.avi"
 #else
 #define TEST_VIDEO "/home/pi/Videos/big_buck_bunny_1080p_surround.avi"
@@ -61,9 +61,7 @@ int main(int argc, char *argv[])
 	
 	fprintf(stderr, "AmbiPi\n");
 	
-#ifndef _DEVEL_
 	FrameBuffer fb("/dev/fb0");
-#endif
 	
 	AmbiPi ambiPi;
 	if (!ambiPi.init(1.7)) {
@@ -105,7 +103,11 @@ int main(int argc, char *argv[])
 			ambiPi.drawTestPattern(i, 128);
 			break;
 		case AmbiPi::AmbiLight:
-			frame = fb.grabFrame();
+#ifdef _GUI_
+			frame = fb.grabFrame(2);
+#else
+			frame = fb.grabFrame(8);
+#endif
 			sleep = 25;
 			if (screenshot) {
 				cv::Mat out;
@@ -143,7 +145,7 @@ int main(int argc, char *argv[])
 		default:
 			break;
 		}
-#ifdef _DEVEL_
+#ifdef _GUI_
 		ambiPi.drawGUI(frame);
 #else
 		fb.drawFrame(frame);
@@ -159,7 +161,7 @@ int main(int argc, char *argv[])
 			t = t2;
 			fps = 0;
 		}
-#ifdef _DEVEL_
+#ifdef _GUI_
 		int key = cv::waitKey(10);
 		if  (key == 'q') {
 			running = false;
@@ -173,7 +175,7 @@ int main(int argc, char *argv[])
 	fprintf(stderr, "Stopping AmbiPi..\n");
 	ambiPi.setColor(0,0,0);
 	ambiPi.render();
-#ifndef _DEVEL_
+#ifndef _GUI_
 	fb.clear();
 #endif
 	fprintf(stderr, "Stopping AmbiPi done..\n");

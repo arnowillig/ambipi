@@ -56,7 +56,7 @@ public:
 	int ledCount() const;
 	void rainbow(int cnt);
 
-#ifdef _DEVEL_
+#ifdef _GUI_
 	void drawGUI(cv::Mat frame);
 #endif
 	void calculateAmbilightFromFrame(cv::Mat frame, bool bgr=false);

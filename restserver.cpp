@@ -28,6 +28,7 @@ void RESTServer::start(int port)
 
 void RESTServer::getScreenshot(const Rest::Request& request, Http::ResponseWriter response)
 {
+	(void) request;
 	cv::Mat frame = _ambiPi->frameBuffer()->grabFrame(2, true);
 	
 	std::vector<uchar> buf;
@@ -41,6 +42,7 @@ void RESTServer::getScreenshot(const Rest::Request& request, Http::ResponseWrite
 
 void RESTServer::getLEDs(const Rest::Request& request, Http::ResponseWriter response)
 {
+	(void) request;
 	std::string resp = ""; // std::to_string(alpha) + "\n";
 	response.send(Http::Code::Ok, resp);
 }
@@ -77,6 +79,7 @@ void RESTServer::setBrightness(const Rest::Request& request, Http::ResponseWrite
 
 void RESTServer::getBrightness(const Rest::Request& request, Http::ResponseWriter response)
 {
+	(void) request;
 	int bri = (_ambiPi->getBrightness() * 100) / 255;
 
 	std::string resp = std::to_string(bri) + "\n";

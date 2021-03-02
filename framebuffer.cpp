@@ -12,8 +12,6 @@
 #define ALIGN_TO_16(x)  ((x + 15) & ~15)
 #endif
 
-DISPMANX_DISPLAY_HANDLE_T display;
-
 FrameBuffer::FrameBuffer(const char* devicePath) : _devicePath(devicePath)
 {
 #if HAVE_DISPMANX
@@ -24,7 +22,7 @@ FrameBuffer::FrameBuffer(const char* devicePath) : _devicePath(devicePath)
 	int fd = -1;
 	fd = open(devicePath, O_RDWR);
 	if (fd >= 0) {
-		if (!ioctl(fd, FBIOGET_VSCREENINFO, &screen_info)) {
+		if (0 == ioctl(fd, FBIOGET_VSCREENINFO, &screen_info)) {
 			_xres_virtual = screen_info.xres_virtual;
 			_yres_virtual = screen_info.yres_virtual;
 			_bits_per_pixel = screen_info.bits_per_pixel;
@@ -83,8 +81,6 @@ void FrameBuffer::drawFrame(cv::Mat frame)
 	}
 }
 
-#if HAVE_DISPMANX
-
 cv::Mat FrameBuffer::grabFrame(int div, bool rgb) const
 {
 	// int div = 8;
@@ -92,25 +88,17 @@ cv::Mat FrameBuffer::grabFrame(int div, bool rgb) const
 	int ih = 1080 / div; // info.height
 	cv::Mat frame = cv::Mat(ih, iw, CV_8UC3, cv::Scalar(64,64,64));
 
-	// display = vc_dispmanx_display_open(0);
-
-	// DISPMANX_MODEINFO_T info;
-	// int ret = vc_dispmanx_display_get_info(display, &info);
-	// printf("Display is %d x %d\n", info.width, info.height);
-	
+#if HAVE_DISPMANX
 	int32_t dmxPitch = 3 * ALIGN_TO_16(iw);
-
 	uint32_t vc_image_ptr;
-	DISPMANX_RESOURCE_HANDLE_T resource = vc_dispmanx_resource_create(VC_IMAGE_RGB888, iw, ih, &vc_image_ptr);
-
 	VC_RECT_T rect;
+	DISPMANX_RESOURCE_HANDLE_T resource = vc_dispmanx_resource_create(VC_IMAGE_RGB888, iw, ih, &vc_image_ptr);
 	vc_dispmanx_snapshot(display, resource, DISPMANX_NO_ROTATE);
 	vc_dispmanx_rect_set(&rect, 0, 0, iw, ih);
 	vc_dispmanx_resource_read_data(resource, &rect, frame.data, dmxPitch);
-
 	vc_dispmanx_resource_delete(resource);
-	// vc_dispmanx_display_close(display);
-	
+#endif
+
 	if (rgb) {
 		cv::cvtColor(frame, frame, cv::COLOR_RGB2BGR);
 	}
@@ -120,7 +108,7 @@ cv::Mat FrameBuffer::grabFrame(int div, bool rgb) const
 	return frame(cv::Rect(bx,by,iw-2*bx,ih-2*by)).clone();
 }
 
-
+#if HAVE_DISPMANX
 void drawToDispManX(cv::Mat frame)
 {
 	static bool initBCM = false;
@@ -141,9 +129,9 @@ void drawToDispManX(cv::Mat frame)
 	VC_RECT_T rect;
 	vc_dispmanx_rect_set(&rect, 0, 0, info.width, info.height);
 
-       int  pitch = frame.cols*3; // ALIGN_UP(width*3, 32);
+	int  pitch = frame.cols*3; // ALIGN_UP(width*3, 32);
 
-       DISPMANX_UPDATE_HANDLE_T update = vc_dispmanx_update_start(0);
+	DISPMANX_UPDATE_HANDLE_T update = vc_dispmanx_update_start(0);
 
 	VC_RECT_T dst_rect;
 	ret = vc_dispmanx_resource_write_data(resource, VC_IMAGE_RGB888, pitch, frame.data, &dst_rect);
@@ -154,15 +142,15 @@ void drawToDispManX(cv::Mat frame)
 	VC_DISPMANX_ALPHA_T alpha;
 
 	DISPMANX_ELEMENT_HANDLE_T element = vc_dispmanx_element_add(update,
-		      display,
-		      layer,        // layer
-		      &dst_rect,
-		      resource,
-		      &rect,
-		      DISPMANX_PROTECTION_NONE,
-		      &alpha,
-		      NULL,        // clamp
-		      DISPMANX_NO_ROTATE);
+								    display,
+								    layer,        // layer
+								    &dst_rect,
+								    resource,
+								    &rect,
+								    DISPMANX_PROTECTION_NONE,
+								    &alpha,
+								    NULL,        // clamp
+								    DISPMANX_NO_ROTATE);
 
 
 	ret = vc_dispmanx_update_submit_sync(update);
@@ -215,7 +203,7 @@ int dispmanx(void)
 
 	ret = vc_dispmanx_resource_delete(resource);
 	assert( ret == 0 );
-//	ret = vc_dispmanx_display_close(display);
+	//	ret = vc_dispmanx_display_close(display);
 	assert( ret == 0 );
 
 	return 0;
