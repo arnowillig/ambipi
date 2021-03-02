@@ -7,13 +7,21 @@
 RESTServer::RESTServer(AmbiPi* ambiPi) : _ambiPi(ambiPi)
 {
 	Rest::Routes::Get(_router, "/api/alpha/:alpha",		Rest::Routes::bind(&RESTServer::setAlpha, this));
+	Rest::Routes::Get(_router, "/api/alpha",		Rest::Routes::bind(&RESTServer::getAlpha, this));
+
 	Rest::Routes::Get(_router, "/api/gamma/:gamma",		Rest::Routes::bind(&RESTServer::setGamma, this));
-	Rest::Routes::Get(_router, "/api/bri",			Rest::Routes::bind(&RESTServer::getBrightness, this));
+	Rest::Routes::Get(_router, "/api/gamma",		Rest::Routes::bind(&RESTServer::getGamma, this));
+
 	Rest::Routes::Get(_router, "/api/bri/:bri",		Rest::Routes::bind(&RESTServer::setBrightness, this));
+	Rest::Routes::Get(_router, "/api/bri",			Rest::Routes::bind(&RESTServer::getBrightness, this));
+
 	Rest::Routes::Get(_router, "/api/mode/:mode",		Rest::Routes::bind(&RESTServer::setMode, this));
+	Rest::Routes::Get(_router, "/api/mode",			Rest::Routes::bind(&RESTServer::getMode, this));
+
 	Rest::Routes::Get(_router, "/api/col/:r/:g/:b",		Rest::Routes::bind(&RESTServer::setColor, this));
 	Rest::Routes::Get(_router, "/api/leds",			Rest::Routes::bind(&RESTServer::getLEDs, this));
 	Rest::Routes::Get(_router, "/api/screenshot.jpg",	Rest::Routes::bind(&RESTServer::getScreenshot, this));
+
 	Rest::Routes::Get(_router, "/index.html",		Rest::Routes::bind(&RESTServer::getStaticHTML, this));
 	Rest::Routes::Get(_router, "/",				Rest::Routes::bind(&RESTServer::getStaticHTML, this));
 }
@@ -30,6 +38,7 @@ void RESTServer::start(int port)
 
 void RESTServer::getStaticHTML(const Rest::Request& request, Http::ResponseWriter response)
 {
+	(void) request;
  	Http::serveFile(response, "/home/pi/src/ambipi/html/index.html");
 }
 
@@ -62,12 +71,27 @@ void RESTServer::setAlpha(const Rest::Request &request, Http::ResponseWriter res
 	_ambiPi->setAlpha(alpha);
 }
 
+void RESTServer::getAlpha(const Rest::Request &request, Http::ResponseWriter response)
+{
+	(void) request;
+	std::string resp = std::to_string(_ambiPi->alpha()) + "\n";
+	response.send(Http::Code::Ok, resp);
+}
+
+
 void RESTServer::setGamma(const Rest::Request &request, Http::ResponseWriter response)
 {
 	double gamma = request.param(":gamma").as<double>();
 	std::string resp = std::to_string(gamma) + "\n";
 	response.send(Http::Code::Ok, resp);
 	_ambiPi->setGamma(gamma);
+}
+
+void RESTServer::getGamma(const Rest::Request &request, Http::ResponseWriter response)
+{
+	(void) request;
+	std::string resp = std::to_string(_ambiPi->gamma()) + "\n";
+	response.send(Http::Code::Ok, resp);
 }
 
 void RESTServer::setBrightness(const Rest::Request& request, Http::ResponseWriter response)
@@ -87,7 +111,7 @@ void RESTServer::setBrightness(const Rest::Request& request, Http::ResponseWrite
 void RESTServer::getBrightness(const Rest::Request& request, Http::ResponseWriter response)
 {
 	(void) request;
-	int bri = (_ambiPi->getBrightness() * 100) / 255;
+	int bri = (_ambiPi->brightness() * 100) / 255;
 
 	std::string resp = std::to_string(bri) + "\n";
 	response.send(Http::Code::Ok, resp);
@@ -115,9 +139,36 @@ void RESTServer::setMode(const Rest::Request& request, Http::ResponseWriter resp
 		_ambiPi->setMode(AmbiPi::AmbiLight);
 	} else if (mode=="white") {
 		_ambiPi->setMode(AmbiPi::White);
+	} else if (mode=="color") {
+		_ambiPi->setMode(AmbiPi::Color);
 	} else if (mode=="rainbow") {
 		_ambiPi->setMode(AmbiPi::Rainbow);
 	} else if (mode=="testpattern") {
 		_ambiPi->setMode(AmbiPi::TestPattern);
 	}
+}
+
+void RESTServer::getMode(const Rest::Request& request, Http::ResponseWriter response)
+{
+	(void) request;
+	std::string mode;
+	switch (_ambiPi->mode()) {
+	case AmbiPi::Off:
+		mode = "off"; break;
+	case AmbiPi::AmbiLight:
+		mode = "ambilight"; break;
+	case AmbiPi::AmbiLight2:
+		mode = "ambilight2"; break;
+	case AmbiPi::White:
+		mode = "white"; break;
+	case AmbiPi::Color:
+		mode = "color"; break;
+	case AmbiPi::Rainbow:
+		mode = "rainbow"; break;
+	case AmbiPi::TestPattern:
+		mode = "testpattern"; break;
+	default:
+		break;
+	}
+	response.send(Http::Code::Ok, mode + "\n");
 }

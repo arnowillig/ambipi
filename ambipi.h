@@ -37,10 +37,18 @@ public:
 	Mode mode() const { return _mode; }
 
 	bool init(double gamma);
+
+	int ledCount() const;
+
 	void setBrightness(uint8_t bri);
+	uint8_t brightness() const;
+
 	void setAlpha(double alpha);
+	double alpha() const;
+
 	void setGamma(double gamma);
-	uint8_t getBrightness() const;
+	double gamma() const;
+
 	void setColor(uint8_t r, uint8_t g, uint8_t  b);
 	void setColorLeft(uint8_t r, uint8_t g, uint8_t  b);
 	void setColorTop(uint8_t r, uint8_t g, uint8_t  b);
@@ -53,7 +61,6 @@ public:
 	void setColorRight(uint8_t idx, uint8_t r, uint8_t g, uint8_t  b);
 
 	void drawTestPattern(int cnt, int bri);
-	int ledCount() const;
 	void rainbow(int cnt);
 
 #ifdef _GUI_
@@ -72,6 +79,7 @@ private:
 	cv::Mat _colorsR;
 	Mode _mode;
 	double _alpha;
+	double _gamma;
 
 };
 

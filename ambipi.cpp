@@ -22,7 +22,7 @@
 #define WS2811_DMA              10
 #define MAX_BRIGHTNESS		255
 
-AmbiPi::AmbiPi() : _mode(Off), _alpha(0.90)
+AmbiPi::AmbiPi() : _mode(Off), _alpha(0.90), _gamma(0)
 {
 	uint8_t r = 0;
 	uint8_t g = 0;
@@ -84,7 +84,7 @@ void AmbiPi::setBrightness(uint8_t bri)
 	_ws2811->channel[1].brightness	= bri;
 }
 
-uint8_t AmbiPi::getBrightness() const
+uint8_t AmbiPi::brightness() const
 {
 	return _ws2811->channel[0].brightness;
 }
@@ -94,11 +94,23 @@ void AmbiPi::setAlpha(double alpha)
 	_alpha = alpha;
 }
 
+double AmbiPi::alpha() const
+{
+	return _alpha;
+}
+
+
 void AmbiPi::setGamma(double gamma)
 {
+	_gamma = gamma;
 	if (gamma != 0) {
 		ws2811_set_custom_gamma_factor(_ws2811, gamma);
 	}
+}
+
+double AmbiPi::gamma() const
+{
+	return _gamma;
 }
 
 void AmbiPi::clear()

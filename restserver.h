@@ -20,11 +20,14 @@ public:
 	void start(int port);
 
 	void setAlpha(const Rest::Request &request, Http::ResponseWriter response);
+	void getAlpha(const Rest::Request &request, Http::ResponseWriter response);
 	void setGamma(const Rest::Request &request, Http::ResponseWriter response);
+	void getGamma(const Rest::Request &request, Http::ResponseWriter response);
 	void setBrightness(const Rest::Request &request, Http::ResponseWriter response);
 	void getBrightness(const Rest::Request &request, Http::ResponseWriter response);
 	void setColor(const Rest::Request &request, Http::ResponseWriter response);
 	void setMode(const Rest::Request &request, Http::ResponseWriter response);
+	void getMode(const Rest::Request &request, Http::ResponseWriter response);
 	void getLEDs(const Rest::Request &request, Http::ResponseWriter response);
 	void getScreenshot(const Rest::Request& request, Http::ResponseWriter response);
 	void getStaticHTML(const Rest::Request& request, Http::ResponseWriter response);
