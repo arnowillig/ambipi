@@ -10,12 +10,17 @@ function updateImage() {
            newImage = new Image();
            newImage.src = temp + "?" + new Date().getTime();
     }
-    setTimeout(updateImage, 1000);
+    setTimeout(updateImage, 250);
 };
 </script>
 <body onload="updateImage();">
 <h1>AtariPi</h1>
 <hr />
 <img id="img" src="/api/screenshot.jpg" />
+<hr />
+<ul>
+<li><a href="http://ataripi.fritz.box:1880/">NodeRED</a></li>
+<li><a href="http://ataripi.fritz.box:8080/">Kodi</a></li>
+</ul>
 </body>
 </html>

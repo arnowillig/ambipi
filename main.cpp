@@ -74,18 +74,23 @@ int main(int argc, char *argv[])
 
 	cv::Mat frame;
 	fprintf(stderr, "Setting color..\n");
-	ambiPi.setMode(AmbiPi::AmbiLight);
+	ambiPi.setMode(AmbiPi::Off);
 	
 	cv::VideoCapture* capture = nullptr;
 	
+	AmbiPi::Mode lastMode = AmbiPi::Off;
 	time_t t = time(NULL);
 	int fps = 0;
 	for (int i=0; running; i++) {
 		int sleep = 25;
 		switch (ambiPi.mode()) {
 		case AmbiPi::Off:
-			sleep = 100;
 			ambiPi.setColor(0,0,0);
+			if (lastMode != AmbiPi::Off) {
+				ambiPi.render();
+			}
+			usleep(100*1000);
+			continue;
 			break;
 		case AmbiPi::White:
 			sleep = 100;
@@ -148,9 +153,11 @@ int main(int argc, char *argv[])
 #ifdef _GUI_
 		ambiPi.drawGUI(frame);
 #else
-		fb.drawFrame(frame);
+		// fb.drawFrame(frame);
 		// drawToDispManX(frame);
-		ambiPi.render();
+		if (ambiPi.mode() != AmbiPi::Off) {
+			ambiPi.render();
+		}
 #endif
 		usleep(1000*sleep);
 
