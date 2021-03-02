@@ -15,6 +15,7 @@ class RESTServer
 {
 	AmbiPi* _ambiPi;
 	Rest::Router _router;
+	std::string _basePath;
 public:
 	RESTServer(AmbiPi* ambiPi);
 	void start(int port);
