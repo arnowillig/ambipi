@@ -6,6 +6,8 @@
 
 RESTServer::RESTServer(AmbiPi* ambiPi) : _ambiPi(ambiPi)
 {
+	_basePath = "/home/pi/src/ambipi/html";
+
 	Rest::Routes::Get(_router, "/api/alpha/:alpha",		Rest::Routes::bind(&RESTServer::setAlpha, this));
 	Rest::Routes::Get(_router, "/api/alpha",		Rest::Routes::bind(&RESTServer::getAlpha, this));
 
@@ -24,6 +26,7 @@ RESTServer::RESTServer(AmbiPi* ambiPi) : _ambiPi(ambiPi)
 
 	Rest::Routes::Get(_router, "/index.html",		Rest::Routes::bind(&RESTServer::getStaticHTML, this));
 	Rest::Routes::Get(_router, "/",				Rest::Routes::bind(&RESTServer::getStaticHTML, this));
+	Rest::Routes::Get(_router, "/static/*",                 Rest::Routes::bind(&RESTServer::getStaticHTML, this));
 }
 
 void RESTServer::start(int port)
@@ -38,8 +41,15 @@ void RESTServer::start(int port)
 
 void RESTServer::getStaticHTML(const Rest::Request& request, Http::ResponseWriter response)
 {
-	(void) request;
- 	Http::serveFile(response, "/home/pi/src/ambipi/html/index.html");
+	if (request.resource()=="/" || request.resource()=="/index.html") {
+		Http::serveFile(response, _basePath + "/index.html");
+		return;
+	}
+	if (request.resource().find("/static/", 0) == 0) {
+		Http::serveFile(response, _basePath + request.resource().substr(7));
+		return;
+	}
+	response.send(Http::Code::Not_Found);
 }
 
 void RESTServer::getScreenshot(const Rest::Request& request, Http::ResponseWriter response)
