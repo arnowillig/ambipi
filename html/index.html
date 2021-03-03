@@ -1,43 +1,43 @@
 <html>
-<head>
-  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
-  <script src="/static/ambipi.js"></script>
-  <link rel="stylesheet" type="text/css" href="/static/ambipi.css" />
-</head>
-<body> <!-- onload="updateImage();">-->
-<h1>AtariPi</h1>
-<hr />
-<img id="img" src="/api/screenshot.jpg" />
-<hr />
-<div>
-    <input type="color" id="color" name="color" value="#e66465" />
-    <label for="color">AmbiLight Color</label>
-</div>
-<div>
-    <input type="button" id="ambilight" value="AmbiLight" />
-    <input type="button" id="rainbow" value="Rainbow" />
-    <input type="button" id="testpattern" value="Test pattern" />
-    <input type="button" id="white"   value="Warm White" />
-    <input type="button" id="off"     value="Off" />
-</div>
-<div>
-    <input type="button" id="bri0"     value="Brightness 0%" />
-    <input type="button" id="bri25"    value="Brightness 25%" />
-    <input type="button" id="bri50"    value="Brightness 50%" />
-    <input type="button" id="bri75"    value="Brightness 75%" />
-    <input type="button" id="bri100"   value="Brightness 100%" />
-</div>
-<div class="slidecontainer">
-    <label for="name">AmbiLight Brightness</label>
-    <input type="range" min="0" max="100" value="100" class="slider" name="bri" id="bri" />
-</div>
-<div>
-    <input type="button" id="crop0"    value="Clear Crop Rect" />
-    <input type="button" id="crop1"    value="Update Crop Rect" />
-</div>
-<ul>
-<li><a href="http://ataripi.fritz.box:1880/">NodeRED</a></li>
-<li><a href="http://ataripi.fritz.box:8080/">Kodi</a></li>
-</ul>
-</body>
+	<head>
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+		<script src="/static/ambipi.js"></script>
+		<link rel="stylesheet" type="text/css" href="/static/ambipi.css" />
+	</head>
+	<body>
+		<h1>AtariPi</h1>
+		<hr />
+		<img id="img" src="/api/screenshot.jpg" />
+		<hr />
+		<div>
+		<input type="color" id="color" name="color" value="#e66465" />
+		<label for="color">AmbiLight Color</label>
+		</div>
+		<div>
+			<input type="button" id="ambilight" value="AmbiLight" />
+			<input type="button" id="rainbow" value="Rainbow" />
+			<input type="button" id="testpattern" value="Test pattern" />
+			<input type="button" id="white"   value="Warm White" />
+			<input type="button" id="off"     value="Off" />
+		</div>
+		<div>
+			<input type="button" id="bri0"     value="Brightness 0%" />
+			<input type="button" id="bri25"    value="Brightness 25%" />
+			<input type="button" id="bri50"    value="Brightness 50%" />
+			<input type="button" id="bri75"    value="Brightness 75%" />
+			<input type="button" id="bri100"   value="Brightness 100%" />
+		</div>
+		<div class="slidecontainer">
+			<label for="name">AmbiLight Brightness</label>
+			<input type="range" min="0" max="100" value="100" class="slider" name="bri" id="bri" />
+		</div>
+		<div>
+			<input type="button" id="crop0"    value="Clear Crop Rect" />
+			<input type="button" id="crop1"    value="Update Crop Rect" />
+		</div>
+		<ul>
+			<li><a href="http://ataripi.fritz.box:1880/">NodeRED</a></li>
+			<li><a href="http://ataripi.fritz.box:8080/">Kodi</a></li>
+		</ul>
+	</body>
 </html>

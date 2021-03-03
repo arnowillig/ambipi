@@ -4,7 +4,7 @@ CONFIG += c++17 console
 CONFIG -= app_bundle
 
 MAKEFILE = Makefile_qmake
-OTHER_FILES += Makefile
+OTHER_FILES += Makefile html/*
 
 DEFINES += _GUI_
 
