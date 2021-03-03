@@ -111,7 +111,7 @@ int main(int argc, char *argv[])
 #ifdef _GUI_
 			frame = fb.grabFrame(2);
 #else
-			frame = fb.grabFrame(8);
+			frame = fb.grabFrame(12);
 #endif
 			frame = ambiPi.cropBorders(frame);
 			sleep = 25;

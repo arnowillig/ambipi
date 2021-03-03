@@ -394,11 +394,13 @@ cv::Mat AmbiPi::cropBorders(cv::Mat frame) const
 	
 	// fprintf(stderr, "cropBorder(%d,%d %dx%d)\n", minX, minY, maxX-minX+1,maxY-minY+1);
 
-	cv::Mat cropped = frame(cv::Rect(minX,minY,maxX+1-minX,maxY+1-minY));
+	int b = 0;
+	cv::Rect r = cv::Rect(minX+b,minY+b,maxX+1-minX-2*b,maxY+1-minY-2*b);
+	cv::Mat cropped = frame(r);
 	cv::Mat out;
-	cv::resize(cropped.clone(), out, cv::Size(frame.cols, frame.rows), 0.5, 0.5, cv::INTER_NEAREST);
+	cv::resize(cropped, out, cv::Size(frame.cols, frame.rows), 0, 0, cv::INTER_NEAREST);
 	
-	cropped.copyTo(out(cv::Rect(minX,minY,maxX+1-minX,maxY+1-minY)));
+	cropped.copyTo(out(r));
 	return out;
 
 	// return frame(cv::Rect(minX,minY,maxX+1-minX,maxY+1-minY));
