@@ -62,6 +62,8 @@ void RESTServer::getScreenshot(const Rest::Request& request, Http::ResponseWrite
 	// cv::Mat frame = _ambiPi->frameBuffer()->grabFrame(2, true);
 	cv::Mat frame = _ambiPi->lastFrame();
 	frame = _ambiPi->cropBorders(frame, true);
+	
+	frame = _ambiPi->getDebugFrame(frame);
 
 	std::vector<uchar> buf;
 	std::vector<int> param(2);

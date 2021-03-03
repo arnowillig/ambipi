@@ -32,7 +32,7 @@ AmbiPi::AmbiPi() : _mode(Off), _alpha(0.90), _gamma(0), _enableCropping(false)
 	_colorsT = cv::Mat(1, LEDS_TOP - a,    CV_8UC3, cv::Scalar(b, g, r));
 	_colorsB = cv::Mat(1, LEDS_BOTTOM - a, CV_8UC3, cv::Scalar(b, g, r));
 	_colorsR = cv::Mat(LEDS_RIGHT - a, 1,  CV_8UC3, cv::Scalar(b, g, r));
-	_lastFrame = cv::Mat(480, 720, CV_8UC3, cv::Scalar(0,255,0));
+	clearLastFrame();
 }
 
 AmbiPi::~AmbiPi()
@@ -41,6 +41,12 @@ AmbiPi::~AmbiPi()
 		ws2811_fini(_ws2811);
 		free(_ws2811);
 	}
+}
+
+void AmbiPi::clearLastFrame()
+{
+	setLastFrame(cv::Mat(480, 720, CV_8UC3, cv::Scalar(0,255,0)));
+	_cropRect = cv::Rect(0, 0, 720, 480);
 }
 
 bool AmbiPi::init(double gamma)
@@ -258,13 +264,8 @@ void AmbiPi::render()
 	ws2811_render(_ws2811);
 }
 
-#ifdef _GUI_
-void AmbiPi::drawGUI(cv::Mat frame)
+cv::Mat AmbiPi::getDebugFrame(cv::Mat frame) const
 {
-	if (frame.empty()) {
-		frame = cv::Mat(1080, 1920, CV_8UC3, cv::Scalar(64,64,64));
-	}
-
 	int top   = LEDS_TOP     - 2;
 	int left  = LEDS_LEFT    - 2;
 
@@ -282,9 +283,7 @@ void AmbiPi::drawGUI(cv::Mat frame)
 
 	}
 
-	cv::resize(frame, frame, cv::Size(), 0.5, 0.5, cv::INTER_LINEAR);
-
-	const int border = 80;
+	const int border = 50;
 	cv::Mat out(frame.rows+2*border, frame.cols+2*border, CV_8UC3, cv::Scalar(0, 0, 0));
 
 	int ox = (out.cols - frame.cols) / 2;
@@ -301,7 +300,7 @@ void AmbiPi::drawGUI(cv::Mat frame)
 	int  oxx = ox - dwT;
 	int  oyy = oy - dhL;
 
-	cv::blur(out, out, cv::Size(fw*(dwT+dwB)/2, fh*(dhL+dhR)/2));
+	// cv::blur(out, out, cv::Size(fw*(dwT+dwB)/2, fh*(dhL+dhR)/2));
 	frame.copyTo(out(cv::Rect(ox, oy, frame.cols, frame.rows)));
 
 	for (int x=0; x < LEDS_TOP; x++) {
@@ -316,14 +315,14 @@ void AmbiPi::drawGUI(cv::Mat frame)
 		cv::Vec3b colorB = cv::Vec3b((col>>0) & 0xff, (col>>8) & 0xff , (col>>16) & 0xff);
 		cv::rectangle(out, cv::Rect(oxx + (x)*dwT,oyy+LEDS_LEFT*dhL,dwT,dhL), colorB, -1);
 		cv::rectangle(out, cv::Rect(oxx + (x)*dwT,oyy+LEDS_LEFT*dhL,dwT,dhL), cv::Scalar(128,128,128), 1);
-		cv::putText(out, std::to_string(x), cv::Point(oxx+(x+0.125)*dwT,oyy+(LEDS_LEFT+1.5)*dhL), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.5, cv::Scalar(128,128,128), 1, cv::LINE_AA);
+		cv::putText(out, std::to_string(x), cv::Point(oxx+(x+0.125)*dwT,oyy+(LEDS_LEFT+1.5)*dhL + 2), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.5, cv::Scalar(128,128,128), 1, cv::LINE_AA);
 	}
 	for (int y=0; y < LEDS_LEFT; y++) {
 		uint32_t col = _ws2811->channel[0].leds[LEDS_LEFT-y-1];
 		cv::Vec3b colorL = cv::Vec3b((col>>0) & 0xff, (col>>8) & 0xff , (col>>16) & 0xff);
 		cv::rectangle(out, cv::Rect(oxx-dwT, oyy + (y)*dhL, dwT, dhL), colorL, -1);
 		cv::rectangle(out, cv::Rect(oxx-dwT, oyy + (y)*dhL, dwT, dhL), cv::Scalar(128,128,128), 1);
-		cv::putText(out, std::to_string(LEDS_LEFT-y-1), cv::Point(oxx-2*dwT, oyy + (y+0.75)*dhL), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.5, cv::Scalar(128,128,128), 1, cv::LINE_AA);
+		cv::putText(out, std::to_string(LEDS_LEFT-y-1), cv::Point(oxx-2*dwT - 4, oyy + (y+0.75)*dhL), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.5, cv::Scalar(128,128,128), 1, cv::LINE_AA);
 	}
 	for (int y=0; y < LEDS_RIGHT; y++) {
 		uint32_t col = _ws2811->channel[1].leds[LEDS_BOTTOM+LEDS_RIGHT-y-1];
@@ -332,7 +331,17 @@ void AmbiPi::drawGUI(cv::Mat frame)
 		cv::rectangle(out, cv::Rect(oxx+(LEDS_TOP*dwT), oyy + (y)*dhL, dwT, dhL), cv::Scalar(128,128,128), 1);
 		cv::putText(out, std::to_string(LEDS_BOTTOM+LEDS_RIGHT-y-1), cv::Point(oxx+((LEDS_TOP+1.5)*dwT), oyy + (y+0.75)*dhL), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.5, cv::Scalar(128,128,128), 1, cv::LINE_AA);
 	}
+	return out;
+}
 
+#ifdef _GUI_
+void AmbiPi::drawGUI(cv::Mat frame)
+{
+	if (frame.empty()) {
+		frame = cv::Mat(1080, 1920, CV_8UC3, cv::Scalar(64,64,64));
+	}
+	cv::resize(frame, frame, cv::Size(), 0.5, 0.5, cv::INTER_LINEAR);
+	cv::Mat out = getDebugFrame(frame);
 	cv::imshow("AmbiPi", out);
 }
 #endif
@@ -363,17 +372,15 @@ cv::Mat AmbiPi::createTestImage(int w, int h)
 	return frame;
 }
 
-cv::Mat AmbiPi::cropBorders(cv::Mat frame, bool debug) const
+void AmbiPi::updateCropRect(cv::Mat frame)
 {
+	fprintf(stderr, "updateCropRect(%dx%d)\n", frame.cols, frame.rows);
 	int minX = 0;
-	int minY = 2;
+	int minY = 0;
 	int maxX = frame.cols-1;
-	int maxY = frame.rows-1-2;
+	int maxY = frame.rows-1;
 	
-	if (croppingEnabled()) {
 	int i;
-
-	// cv::resize(frame, frame, cv::Size(frame.cols, frame.rows), 0, 0, cv::INTER_NEAREST);
 	
 	cv::Mat gray;
 	cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
@@ -410,26 +417,35 @@ cv::Mat AmbiPi::cropBorders(cv::Mat frame, bool debug) const
 	}
 	maxY = i;
 	
+	if (maxX-16 < minX || maxY-16 < minY) { // Reset
+		minX = 0;
+		minY = 0;
+		maxX = frame.cols-1;
+		maxY = frame.rows-1;
 	}
+	
+	
 	// fprintf(stderr, "cropBorder(%dx%d -> %d,%d %dx%d)\n", frame.cols, frame.rows, minX, minY, maxX-minX+1,maxY-minY+1);
+	_cropRect = cv::Rect(minX,minY, maxX-minX+1, maxY-minY+1);
+	fprintf(stderr, "updateCropRect(%dx%d) -> %d,%d %dx%d\n", frame.cols, frame.rows, minX,minY, maxX-minX+1, maxY-minY+1);
+}
 
-	int b = 0;
-	cv::Rect r = cv::Rect(minX+b,minY+b,maxX+1-minX-2*b,maxY+1-minY-2*b);
-	cv::Mat cropped = frame(r);
+
+cv::Mat AmbiPi::cropBorders(cv::Mat frame, bool debug) const
+{
+	cv::Mat cropped = frame(_cropRect);
 	cv::Mat out;
 	
 	if (!debug) {
 		cv::resize(cropped, out, cv::Size(frame.cols, frame.rows), 0, 0, cv::INTER_NEAREST);
-		cropped.copyTo(out(r));
+		cropped.copyTo(out(_cropRect));
 	} else {
-		out = cv::Mat(frame.rows, frame.cols, CV_8UC3, cv::Scalar(0,255,0));
-		cropped.copyTo(out(r));
+		out = cv::Mat(frame.rows, frame.cols, CV_8UC3, cv::Scalar(64,0,0));
+		cropped.copyTo(out(_cropRect));
 		// cv::cvtColor(gray, out, cv::COLOR_GRAY2BGR);
-		cv::rectangle(out, r, cv::Scalar(0,0,255));
+		cv::rectangle(out, _cropRect, cv::Scalar(0,0,255));
 	}
 	return out;
-	
-	
 }
 
 void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)

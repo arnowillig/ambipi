@@ -38,6 +38,7 @@ public:
 	Mode mode() const { return _mode; }
 
 	bool init(double gamma);
+	void clearLastFrame();
 
 	int ledCount() const;
 
@@ -52,6 +53,8 @@ public:
 	
 	void setEnableCropping(bool cropping);
 	bool croppingEnabled() const;
+	
+	void updateCropRect(cv::Mat frame);
 
 	void setColor(uint8_t r, uint8_t g, uint8_t  b);
 	void setColorLeft(uint8_t r, uint8_t g, uint8_t  b);
@@ -67,6 +70,7 @@ public:
 	void drawTestPattern(int cnt, int bri);
 	void rainbow(int cnt);
 
+	cv::Mat getDebugFrame(cv::Mat frame) const;
 #ifdef _GUI_
 	void drawGUI(cv::Mat frame);
 #endif
@@ -85,6 +89,7 @@ private:
 	cv::Mat _colorsB;
 	cv::Mat _colorsL;
 	cv::Mat _colorsR;
+	cv::Rect _cropRect;
 	Mode _mode;
 	double _alpha;
 	double _gamma;

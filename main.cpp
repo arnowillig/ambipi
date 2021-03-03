@@ -74,14 +74,18 @@ int main(int argc, char *argv[])
 
 	cv::Mat frame;
 	ambiPi.setMode(AmbiPi::Off);
+	AmbiPi::Mode lastMode = AmbiPi::Off;
 	
 	cv::VideoCapture* capture = nullptr;
 	
-	AmbiPi::Mode lastMode = AmbiPi::Off;
 	time_t t = time(NULL);
 	int fps = 0;
+	int sleep;
 	for (int i=0; running; i++) {
-		int sleep = 25;
+		if (lastMode != ambiPi.mode()) {
+			ambiPi.clearLastFrame();
+		}
+		
 		switch (ambiPi.mode()) {
 		case AmbiPi::Off:
 			ambiPi.setColor(0,0,0);
@@ -112,6 +116,7 @@ int main(int argc, char *argv[])
 #else
 			frame = fb.grabFrame(12);
 #endif
+			ambiPi.updateCropRect(frame);
 			frame = ambiPi.cropBorders(frame, false);
 			sleep = 25;
 			// sleep = 50;
@@ -146,7 +151,11 @@ int main(int argc, char *argv[])
 					capture = nullptr;
 					sleep = 100;
 				} else {
-					ambiPi.setLastFrame(frame);				
+					ambiPi.setLastFrame(frame);
+					if (ambiPi.croppingEnabled()) {
+						ambiPi.updateCropRect(frame);
+						ambiPi.setEnableCropping(false);
+					}
 					frame = ambiPi.cropBorders(frame, false);
 					ambiPi.calculateAmbilightFromFrame(frame);
 					sleep = 10;
@@ -154,6 +163,7 @@ int main(int argc, char *argv[])
 			}
 			break;
 		default:
+			sleep = 100;
 			break;
 		}
 		lastMode = ambiPi.mode();
@@ -162,7 +172,7 @@ int main(int argc, char *argv[])
 #else
 		// fb.drawFrame(frame);
 		// drawToDispManX(frame);
-		if (ambiPi.mode() != AmbiPi::Off) {
+		if ((ambiPi.mode() != AmbiPi::Off)) {
 			ambiPi.render();
 		}
 #endif
