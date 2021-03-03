@@ -9,7 +9,7 @@ function updateImage() {
            newImage = new Image();
            newImage.src = temp + "?" + new Date().getTime();
     }
-    setTimeout(updateImage, 525);
+    setTimeout(updateImage, 125);
 };
 
 function playpause()
@@ -30,6 +30,9 @@ function hexToRgb(hex) {
 $(function() {
   updateImage();
   
+  $.get("/api/bri", function(data) { 
+      $('#bri').val(parseInt(data));
+  });
 
   $("#color").change(function(data) {
     var col = hexToRgb(data.target.value);
@@ -50,5 +53,30 @@ $(function() {
   });
   $("#off").click(function(data) {
     $.get("/api/mode/off", function(data) { });
+  });  
+  $("#bri0").click(function(data) {
+    $.get("/api/bri/0", function(data) { });
+    $('#bri').val(0);
+  });  
+  $("#bri25").click(function(data) {
+    $.get("/api/bri/25", function(data) { });
+    $('#bri').val(25);
+  });  
+  $("#bri50").click(function(data) {
+    $.get("/api/bri/50", function(data) { });
+    $('#bri').val(50);
+  });  
+  $("#bri100").click(function(data) {
+    $.get("/api/bri/100", function(data) { });
+    $('#bri').val(100);
+  });  
+  $("#bri").on("input change", function(data) {
+    $.get("/api/bri/"+$('#bri').val(), function(data) { });
+  });  
+  $("#crop0").click(function(data) {
+    $.get("/api/crop/0", function(data) { });
+  });  
+  $("#crop1").click(function(data) {
+    $.get("/api/crop/1", function(data) { });
   });  
 });

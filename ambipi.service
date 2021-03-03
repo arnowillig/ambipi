@@ -26,6 +26,7 @@ StandardOutput=inherit
 StandardError=inherit
 Restart=always
 User=root
+Nice=10
  
 [Install]
 WantedBy=multi-user.target

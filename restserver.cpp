@@ -20,6 +20,9 @@ RESTServer::RESTServer(AmbiPi* ambiPi) : _ambiPi(ambiPi)
 	Rest::Routes::Get(_router, "/api/mode/:mode",		Rest::Routes::bind(&RESTServer::setMode, this));
 	Rest::Routes::Get(_router, "/api/mode",			Rest::Routes::bind(&RESTServer::getMode, this));
 
+	Rest::Routes::Get(_router, "/api/crop/:crop",		Rest::Routes::bind(&RESTServer::setCropping, this));
+	Rest::Routes::Get(_router, "/api/crop",			Rest::Routes::bind(&RESTServer::getCropping, this));
+
 	Rest::Routes::Get(_router, "/api/col/:r/:g/:b",		Rest::Routes::bind(&RESTServer::setColor, this));
 	Rest::Routes::Get(_router, "/api/leds",			Rest::Routes::bind(&RESTServer::getLEDs, this));
 	Rest::Routes::Get(_router, "/api/screenshot.jpg",	Rest::Routes::bind(&RESTServer::getScreenshot, this));
@@ -56,9 +59,10 @@ void RESTServer::getStaticHTML(const Rest::Request& request, Http::ResponseWrite
 void RESTServer::getScreenshot(const Rest::Request& request, Http::ResponseWriter response)
 {
 	(void) request;
-	cv::Mat frame = _ambiPi->frameBuffer()->grabFrame(2, true);
-	frame = _ambiPi->cropBorders(frame);
-	
+	// cv::Mat frame = _ambiPi->frameBuffer()->grabFrame(2, true);
+	cv::Mat frame = _ambiPi->lastFrame();
+	frame = _ambiPi->cropBorders(frame, true);
+
 	std::vector<uchar> buf;
 	std::vector<int> param(2);
 	param[0] = cv::IMWRITE_JPEG_QUALITY;
@@ -103,6 +107,21 @@ void RESTServer::getGamma(const Rest::Request &request, Http::ResponseWriter res
 {
 	(void) request;
 	std::string resp = std::to_string(_ambiPi->gamma()) + "\n";
+	response.send(Http::Code::Ok, resp);
+}
+
+void RESTServer::setCropping(const Rest::Request &request, Http::ResponseWriter response)
+{
+	int crop = request.param(":crop").as<int>();
+	std::string resp = std::to_string(crop) + "\n";
+	response.send(Http::Code::Ok, resp);
+	_ambiPi->setEnableCropping(crop ? true : false);
+}
+
+void RESTServer::getCropping(const Rest::Request &request, Http::ResponseWriter response)
+{
+	(void) request;
+	std::string resp = std::to_string(_ambiPi->croppingEnabled() ? 1 : 0) + "\n";
 	response.send(Http::Code::Ok, resp);
 }
 

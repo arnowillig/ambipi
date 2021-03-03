@@ -1,7 +1,8 @@
 <html>
 <head>
- <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
- <script src="/static/ambipi.js"></script>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+  <script src="/static/ambipi.js"></script>
+  <link rel="stylesheet" type="text/css" href="/static/ambipi.css" />
 </head>
 <body> <!-- onload="updateImage();">-->
 <h1>AtariPi</h1>
@@ -18,6 +19,21 @@
     <input type="button" id="testpattern" value="Test pattern" />
     <input type="button" id="white"   value="Warm White" />
     <input type="button" id="off"     value="Off" />
+</div>
+<div>
+    <input type="button" id="bri0"     value="Brightness 0%" />
+    <input type="button" id="bri25"    value="Brightness 25%" />
+    <input type="button" id="bri50"    value="Brightness 50%" />
+    <input type="button" id="bri75"    value="Brightness 75%" />
+    <input type="button" id="bri100"   value="Brightness 100%" />
+</div>
+<div class="slidecontainer">
+    <label for="name">AmbiLight Brightness</label>
+    <input type="range" min="0" max="100" value="100" class="slider" name="bri" id="bri" />
+</div>
+<div>
+    <input type="button" id="crop0"    value="Crop Off" />
+    <input type="button" id="crop1"    value="Crop On" />
 </div>
 <ul>
 <li><a href="http://ataripi.fritz.box:1880/">NodeRED</a></li>

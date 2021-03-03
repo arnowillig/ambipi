@@ -26,6 +26,8 @@ public:
 	void getGamma(const Rest::Request &request, Http::ResponseWriter response);
 	void setBrightness(const Rest::Request &request, Http::ResponseWriter response);
 	void getBrightness(const Rest::Request &request, Http::ResponseWriter response);
+	void setCropping(const Rest::Request &request, Http::ResponseWriter response);
+	void getCropping(const Rest::Request &request, Http::ResponseWriter response);
 	void setColor(const Rest::Request &request, Http::ResponseWriter response);
 	void setMode(const Rest::Request &request, Http::ResponseWriter response);
 	void getMode(const Rest::Request &request, Http::ResponseWriter response);

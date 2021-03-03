@@ -73,7 +73,6 @@ int main(int argc, char *argv[])
 	std::thread restThread(&restServer, &server);
 
 	cv::Mat frame;
-	fprintf(stderr, "Setting color..\n");
 	ambiPi.setMode(AmbiPi::Off);
 	
 	cv::VideoCapture* capture = nullptr;
@@ -107,13 +106,13 @@ int main(int argc, char *argv[])
 			sleep = 5;
 			ambiPi.drawTestPattern(i, 128);
 			break;
-		case AmbiPi::AmbiLight:
+		case AmbiPi::AmbiLight2:
 #ifdef _GUI_
 			frame = fb.grabFrame(2);
 #else
 			frame = fb.grabFrame(12);
 #endif
-			frame = ambiPi.cropBorders(frame);
+			frame = ambiPi.cropBorders(frame, false);
 			sleep = 25;
 			// sleep = 50;
 			if (screenshot) {
@@ -123,30 +122,35 @@ int main(int argc, char *argv[])
 				screenshot = false;
 			}
 			if (!frame.empty()) {
-				ambiPi.calculateAmbilightFromFrame(frame,true);
+				ambiPi.calculateAmbilightFromFrame(frame, true);
 			}
 			break;
-		case AmbiPi::AmbiLight2:
+		case AmbiPi::AmbiLight:
 			if (!capture) {
-				capture = new cv::VideoCapture(testVideo);
+				capture = new cv::VideoCapture(0);
+				capture->set(cv::CAP_PROP_FRAME_WIDTH,  720);
+				capture->set(cv::CAP_PROP_FRAME_HEIGHT, 480);
+				capture->set(cv::CAP_PROP_FPS, 25);
+				if (!capture->isOpened()) {
+					fprintf(stderr, "Could not open capture device!\n");
+				}
 			}
-			if (!pauseVideo) {
-				// frame = ambiPi.createTestImage(1920,1080);
-
-				capture->grab();
+			if (!capture->grab()) {
+				sleep = 50;
+				fprintf(stderr, "No frame...\n");
+			} else {
 				capture->retrieve(frame);
+				// fprintf(stderr, "Grab frame: %dx%d\n", frame.cols, frame.rows);
 				if (frame.empty()) {
 					delete capture;
 					capture = nullptr;
-				} else if (frame.cols != 1920) {
-					cv::resize(frame, frame, cv::Size(1920,1080), 0, 0, cv::INTER_LINEAR);
+					sleep = 100;
+				} else {
+					ambiPi.setLastFrame(frame);				
+					frame = ambiPi.cropBorders(frame, false);
+					ambiPi.calculateAmbilightFromFrame(frame);
+					sleep = 10;
 				}
-				sleep = 0;
-			} else {
-				sleep = 100;
-			}
-			if (!frame.empty()) {
-				ambiPi.calculateAmbilightFromFrame(frame);
 			}
 			break;
 		default:
@@ -162,7 +166,9 @@ int main(int argc, char *argv[])
 			ambiPi.render();
 		}
 #endif
-		usleep(1000*sleep);
+		if (sleep>0) {
+			usleep(1000*sleep);
+		}
 
 		fps++;
 		time_t t2 = time(NULL);

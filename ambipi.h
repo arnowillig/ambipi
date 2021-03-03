@@ -2,6 +2,7 @@
 #define AMBIPI_H
 
 #include <opencv2/opencv.hpp>
+#include <mutex>
 
 class FrameBuffer;
 
@@ -48,6 +49,9 @@ public:
 
 	void setGamma(double gamma);
 	double gamma() const;
+	
+	void setEnableCropping(bool cropping);
+	bool croppingEnabled() const;
 
 	void setColor(uint8_t r, uint8_t g, uint8_t  b);
 	void setColorLeft(uint8_t r, uint8_t g, uint8_t  b);
@@ -66,11 +70,14 @@ public:
 #ifdef _GUI_
 	void drawGUI(cv::Mat frame);
 #endif
-	cv::Mat cropBorders(cv::Mat frame) const;
+	cv::Mat cropBorders(cv::Mat frame, bool debug) const;
 	void calculateAmbilightFromFrame(cv::Mat frame, bool bgr=false);
 	void clear();
 	void render();
 	cv::Mat createTestImage(int w, int h);
+	
+	void setLastFrame(cv::Mat frame);
+	cv::Mat lastFrame() const;
 private:
 	ws2811_t* _ws2811;
 	FrameBuffer* _fb;
@@ -81,7 +88,9 @@ private:
 	Mode _mode;
 	double _alpha;
 	double _gamma;
-
+	mutable std::mutex _mutex;
+	cv::Mat _lastFrame;
+	bool _enableCropping;
 };
 
 #endif // AMBIPI_H
