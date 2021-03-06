@@ -22,7 +22,7 @@
 #define WS2811_DMA              10
 #define MAX_BRIGHTNESS		255
 
-AmbiPi::AmbiPi() : _mode(Off), _alpha(0.90), _gamma(0), _enableCropping(false)
+AmbiPi::AmbiPi() : _mode(Off), _alpha(0.85), _gamma(0), _enableCropping(false)
 {
 	uint8_t r = 0;
 	uint8_t g = 0;
@@ -32,7 +32,7 @@ AmbiPi::AmbiPi() : _mode(Off), _alpha(0.90), _gamma(0), _enableCropping(false)
 	_colorsT = cv::Mat(1, LEDS_TOP - a,    CV_8UC3, cv::Scalar(b, g, r));
 	_colorsB = cv::Mat(1, LEDS_BOTTOM - a, CV_8UC3, cv::Scalar(b, g, r));
 	_colorsR = cv::Mat(LEDS_RIGHT - a, 1,  CV_8UC3, cv::Scalar(b, g, r));
-	clearLastFrame();
+	clearLastFrame(0,0,0);
 }
 
 AmbiPi::~AmbiPi()
@@ -43,9 +43,9 @@ AmbiPi::~AmbiPi()
 	}
 }
 
-void AmbiPi::clearLastFrame()
+void AmbiPi::clearLastFrame(uint8_t r,uint8_t g,uint8_t b)
 {
-	setLastFrame(cv::Mat(480, 720, CV_8UC3, cv::Scalar(0,255,0)));
+	setLastFrame(cv::Mat(480, 720, CV_8UC3, cv::Scalar(b,g,r)));
 	_cropRect = cv::Rect(0, 0, 720, 480);
 }
 
@@ -85,7 +85,7 @@ bool AmbiPi::init(double gamma)
 	return true;
 }
 
-void AmbiPi::setEnableCropping(bool cropping)
+void AmbiPi::setUpdateCropRect(bool cropping)
 {
 	_enableCropping = cropping;
 }
@@ -436,8 +436,17 @@ cv::Mat AmbiPi::cropBorders(cv::Mat frame, bool debug) const
 	cv::Mat cropped = frame(_cropRect);
 	cv::Mat out;
 	
+	// debug = false;
 	if (!debug) {
-		cv::resize(cropped, out, cv::Size(frame.cols, frame.rows), 0, 0, cv::INTER_NEAREST);
+		cv::Mat scaled;
+		out = cv::Mat(frame.rows, frame.cols, CV_8UC3, cv::Scalar(0,0,0));
+		cv::resize(cropped, scaled, cv::Size(_cropRect.width, frame.rows), 0, 0, cv::INTER_NEAREST);
+		scaled.copyTo(out(cv::Rect(_cropRect.x, 0, _cropRect.width, frame.rows)));
+
+		cv::resize(cropped, scaled, cv::Size(frame.cols, _cropRect.height), 0, 0, cv::INTER_NEAREST);
+		scaled.copyTo(out(cv::Rect(0, _cropRect.y, frame.cols, _cropRect.height)));
+
+		// cv::resize(cropped, out, cv::Size(frame.cols, frame.rows), 0, 0, cv::INTER_NEAREST);
 		cropped.copyTo(out(_cropRect));
 	} else {
 		out = cv::Mat(frame.rows, frame.cols, CV_8UC3, cv::Scalar(64,0,0));

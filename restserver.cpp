@@ -117,7 +117,7 @@ void RESTServer::setCropping(const Rest::Request &request, Http::ResponseWriter 
 	int crop = request.param(":crop").as<int>();
 	std::string resp = std::to_string(crop) + "\n";
 	response.send(Http::Code::Ok, resp);
-	_ambiPi->setEnableCropping(crop ? true : false);
+	_ambiPi->setUpdateCropRect(crop ? true : false);
 }
 
 void RESTServer::getCropping(const Rest::Request &request, Http::ResponseWriter response)

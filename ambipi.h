@@ -38,7 +38,7 @@ public:
 	Mode mode() const { return _mode; }
 
 	bool init(double gamma);
-	void clearLastFrame();
+	void clearLastFrame(uint8_t r,uint8_t g,uint8_t b);
 
 	int ledCount() const;
 
@@ -51,7 +51,7 @@ public:
 	void setGamma(double gamma);
 	double gamma() const;
 	
-	void setEnableCropping(bool cropping);
+	void setUpdateCropRect(bool cropping);
 	bool croppingEnabled() const;
 	
 	void updateCropRect(cv::Mat frame);
