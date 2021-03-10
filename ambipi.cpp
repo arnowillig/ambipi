@@ -143,6 +143,19 @@ void AmbiPi::setColor(uint8_t r, uint8_t g, uint8_t  b)
 	setColorRight(r,g,b);
 }
 
+void AmbiPi::setColor(int idx, uint8_t r, uint8_t g, uint8_t  b)
+{
+	if (idx<LEDS_LEFT) {
+		setColorLeft(LEDS_LEFT-idx-1,r,g,b);
+	} else if (idx<LEDS_LEFT+LEDS_TOP) {
+		setColorTop(idx-LEDS_LEFT,r,g,b);
+	} else if (idx<LEDS_LEFT+LEDS_TOP+LEDS_RIGHT) {
+		setColorRight(idx-LEDS_LEFT-LEDS_TOP,r,g,b);
+	} else {
+		setColorBottom(LEDS_BOTTOM-(idx-LEDS_LEFT-LEDS_TOP-LEDS_RIGHT)-1,r,g,b);
+	}
+}
+
 void AmbiPi::setColorLeft(uint8_t r, uint8_t g, uint8_t  b)
 {
 	for (int i=0; i < LEDS_LEFT; i++) {
@@ -195,26 +208,40 @@ void AmbiPi::setColorRight(uint8_t idx, uint8_t r, uint8_t g, uint8_t b)
 	_ws2811->channel[1].leds[LEDS_BOTTOM+LEDS_RIGHT-idx-1] = ((r & 0x0ff) << 16) | ((g & 0x0ff) << 8) | (b & 0x0ff);
 }
 
-void AmbiPi::drawTestPattern(int i, int bri)
+void AmbiPi::getRainbowColor(int pos, uint8_t& r, uint8_t& g, uint8_t& b)
 {
-	int r = 255;
-	int g = 255;
-	int b = 255;
-	int cnt = i % ledCount();
-	setColorLeft  (bri,  0,    0);
-	setColorBottom(bri,   0, bri);
-	setColorTop   (  0, bri, bri);
-	setColorRight (  0, bri,   0);
-
-	if (cnt<LEDS_LEFT) {
-		setColorLeft(LEDS_LEFT-cnt-1,r,g,b);
-	} else if (cnt<LEDS_LEFT+LEDS_TOP) {
-		setColorTop(cnt-LEDS_LEFT,r,g,b);
-	} else if (cnt<LEDS_LEFT+LEDS_TOP+LEDS_RIGHT) {
-		setColorRight(cnt-LEDS_LEFT-LEDS_TOP,r,g,b);
+	pos = pos % 256;
+	if (pos<85) {
+		r = pos*3;
+		g = 255-pos*3;
+		b = 0;
+	} else if (pos<170) {
+		pos -= 85;
+		r = 255-pos*3;
+		g = 0;
+		b = pos*3;
 	} else {
-		setColorBottom(LEDS_BOTTOM-(cnt-LEDS_LEFT-LEDS_TOP-LEDS_RIGHT)-1,r,g,b);
+		pos -= 170;
+		r = 0;
+		g = pos*3;
+		b = 255-pos*3;
 	}
+} 
+int AmbiPi::drawTestPattern(int i)
+{
+	uint8_t r,g,b;
+	uint8_t pos = (i/10);
+	getRainbowColor(pos, r, g, b);
+	setColorLeft  (r, g, b);
+	getRainbowColor(pos+64, r, g, b);
+	setColorBottom(r, g, b);
+	getRainbowColor(pos+128, r, g, b);
+	setColorRight (r, g, b);
+	getRainbowColor(pos+192, r, g, b);
+	setColorTop   (r, g, b);
+
+	// setColor(i % ledCount(), 255, 255, 255);
+	return 5;
 }
 
 int AmbiPi::ledCount() const
@@ -222,37 +249,42 @@ int AmbiPi::ledCount() const
 	return LEDS_LEFT + LEDS_TOP + LEDS_RIGHT + LEDS_BOTTOM;
 }
 
-void AmbiPi::rainbow(int cnt)
+int AmbiPi::vegas(int cnt)
 {
 	int c = ledCount();
 	uint8_t r,g,b;
 	for (int i = 0; i<c; i++) {
-		uint8_t pos = (255*i / (c-1) + cnt) % 256;
-		if (pos<85) {
-			r = pos*3;
-			g = 255-pos*3;
-			b = 0;
-		} else if (pos<170) {
-			pos -= 85;
-			r = 255-pos*3;
-			g = 0;
-			b = pos*3;
+		if ((cnt+i)%4 < 2) {
+			
+			if (i%2 == 0) {
+				r = 255;
+				g = 192;
+				b = 0;
+			} else {
+				r = 255;
+				g = 0;
+				b = 0;
+			}
 		} else {
-			pos -= 170;
 			r = 0;
-			g = pos*3;
-			b = 255-pos*3;
+			g = 0;
+			b = 0;
 		}
-		if (i<LEDS_LEFT) {
-			setColorLeft(LEDS_LEFT-i-1,r,g,b);
-		} else if (i<LEDS_LEFT+LEDS_TOP) {
-			setColorTop(i-LEDS_LEFT,r,g,b);
-		} else if (i<LEDS_LEFT+LEDS_TOP+LEDS_RIGHT) {
-			setColorRight(i-LEDS_LEFT-LEDS_TOP,r,g,b);
-		} else {
-			setColorBottom(LEDS_BOTTOM-(i-LEDS_LEFT-LEDS_TOP-LEDS_RIGHT)-1,r,g,b);
-		}
+		setColor(i,r,g,b);
 	}
+	return 100;
+}
+
+int AmbiPi::rainbow(int cnt)
+{
+	int c = ledCount();
+	uint8_t r,g,b;
+	for (int i = 0; i<c; i++) {
+		uint8_t pos = (255*i / (c-1) + cnt);
+		getRainbowColor(pos, r, g, b);
+		setColor(i, r, g, b);
+	}
+	return 25;
 }
 
 void AmbiPi::render()

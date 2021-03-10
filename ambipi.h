@@ -16,6 +16,7 @@ public:
 		White,
 		Color,
 		Rainbow,
+		Vegas,
 		TestPattern,
 		AmbiLight,
 		AmbiLight2
@@ -57,6 +58,7 @@ public:
 	void updateCropRect(cv::Mat frame);
 
 	void setColor(uint8_t r, uint8_t g, uint8_t  b);
+	void setColor(int idx, uint8_t r, uint8_t g, uint8_t  b);
 	void setColorLeft(uint8_t r, uint8_t g, uint8_t  b);
 	void setColorTop(uint8_t r, uint8_t g, uint8_t  b);
 	void setColorBottom(uint8_t r, uint8_t g, uint8_t  b);
@@ -66,9 +68,12 @@ public:
 	void setColorTop(uint8_t idx, uint8_t r, uint8_t g, uint8_t  b);
 	void setColorBottom(uint8_t idx, uint8_t r, uint8_t g, uint8_t  b);
 	void setColorRight(uint8_t idx, uint8_t r, uint8_t g, uint8_t  b);
+	
+	void getRainbowColor(int pos, uint8_t& r, uint8_t& g, uint8_t& b);
 
-	void drawTestPattern(int cnt, int bri);
-	void rainbow(int cnt);
+	int drawTestPattern(int cnt);
+	int rainbow(int cnt);
+	int vegas(int cnt);
 
 	cv::Mat getDebugFrame(cv::Mat frame) const;
 #ifdef _GUI_

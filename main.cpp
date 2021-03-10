@@ -106,12 +106,13 @@ int main(int argc, char *argv[])
 			sleep = 100;
 			break;
 		case AmbiPi::Rainbow:
-			sleep = 5;
-			ambiPi.rainbow(i);
+			sleep = ambiPi.rainbow(i);
+			break;
+		case AmbiPi::Vegas:
+			sleep = ambiPi.vegas(i);
 			break;
 		case AmbiPi::TestPattern:
-			sleep = 5;
-			ambiPi.drawTestPattern(i, 128);
+			sleep = ambiPi.drawTestPattern(i);
 			break;
 		case AmbiPi::AmbiLight2:
 #ifdef _GUI_

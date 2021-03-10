@@ -41,6 +41,9 @@ $(function() {
 	$("#rainbow").click(function(data) {
 		$.get("/api/mode/rainbow", function(data) { });
 	});
+	$("#vegas").click(function(data) {
+		$.get("/api/mode/vegas", function(data) { });
+	});
 	$("#testpattern").click(function(data) {
 		$.get("/api/mode/testpattern", function(data) { });
 	});
@@ -61,6 +64,10 @@ $(function() {
 	$("#bri50").click(function(data) {
 		$.get("/api/bri/50", function(data) { });
 		$('#bri').val(50);
+	});
+	$("#bri75").click(function(data) {
+		$.get("/api/bri/75", function(data) { });
+		$('#bri').val(75);
 	});
 	$("#bri100").click(function(data) {
 		$.get("/api/bri/100", function(data) { });
