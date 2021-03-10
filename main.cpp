@@ -64,7 +64,7 @@ int main(int argc, char *argv[])
 	FrameBuffer fb("/dev/fb0");
 	
 	AmbiPi ambiPi;
-	if (!ambiPi.init(1.7)) {
+	if (!ambiPi.init(1.73)) {
 		return 1;
 	}
 	ambiPi.setFrameBuffer(&fb);

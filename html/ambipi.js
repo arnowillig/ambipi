@@ -56,25 +56,35 @@ $(function() {
 	$("#bri0").click(function(data) {
 		$.get("/api/bri/0", function(data) { });
 		$('#bri').val(0);
+		$('#brivalue').text(0);
 	});
 	$("#bri25").click(function(data) {
 		$.get("/api/bri/25", function(data) { });
 		$('#bri').val(25);
+		$('#brivalue').text(25);
 	});
 	$("#bri50").click(function(data) {
 		$.get("/api/bri/50", function(data) { });
 		$('#bri').val(50);
+		$('#brivalue').text(50);
 	});
 	$("#bri75").click(function(data) {
 		$.get("/api/bri/75", function(data) { });
 		$('#bri').val(75);
+		$('#brivalue').text(75);
 	});
 	$("#bri100").click(function(data) {
 		$.get("/api/bri/100", function(data) { });
 		$('#bri').val(100);
+		$('#brivalue').text(100);
 	});
 	$("#bri").on("input change", function(data) {
 		$.get("/api/bri/"+$('#bri').val(), function(data) { });
+		$('#brivalue').text($('#bri').val());
+	});
+	$("#gamma").on("input change", function(data) {
+		$.get("/api/gamma/"+$('#gamma').val(), function(data) { });
+		$('#gammavalue').text($('#gamma').val());
 	});
 	$("#crop0").click(function(data) {
 		$.get("/api/crop/0", function(data) { });

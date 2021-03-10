@@ -29,8 +29,12 @@
 			<input type="button" id="bri100"   value="Brightness 100%" />
 		</div>
 		<div class="slidecontainer">
-			<label for="name">AmbiLight Brightness</label>
+			<label for="bri">Brightness: <span id="brivalue" >100</span></label>
 			<input type="range" min="0" max="100" value="100" class="slider" name="bri" id="bri" />
+		</div>
+		<div class="slidecontainer">
+			<label for="gamma">Gamma: <span id="gammavalue">1.73</span></label>
+			<input type="range" min="0" max="10" value="1.73" class="slider" name="gamma" id="gamma" step="0.01" />
 		</div>
 		<div>
 			<input type="button" id="crop0"    value="Clear Crop Rect" />

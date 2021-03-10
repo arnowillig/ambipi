@@ -497,8 +497,9 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
 	int left  = LEDS_LEFT    - 2;
 	int right = LEDS_RIGHT   - 2;
 
-	double dw = frame.cols / (double) top;
-	double dh = frame.rows / (double) left;
+	double factor = 2.0;
+	double dw = factor * frame.cols / (double) top;
+	double dh = factor * frame.rows / (double) left;
 
 
 	int interpolation = cv::INTER_LINEAR; // INTER_CUBIC
