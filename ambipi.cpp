@@ -1,6 +1,7 @@
 #include "ambipi.h"
 #include "unistd.h"
 #include <array>
+#include <math.h>
 
 #include "rpi_ws281x/ws2811.h"
 
@@ -17,7 +18,7 @@
 //#define LEDS_RIGHT	(9)
 
 #define TARGET_FREQ             WS2811_TARGET_FREQ
-#define GPIO_PIN1               18
+#define GPIO_PIN1               12
 #define GPIO_PIN2               13
 #define WS2811_DMA              10
 #define MAX_BRIGHTNESS		255
@@ -195,6 +196,14 @@ void AmbiPi::setColorTop(uint8_t idx, uint8_t r, uint8_t g, uint8_t b)
 	assert(idx>=0 && idx<LEDS_TOP);
 	_ws2811->channel[0].leds[LEDS_LEFT+idx] = ((r & 0x0ff) << 16) | ((g & 0x0ff) << 8) | (b & 0x0ff);
 }
+void AmbiPi::getColorTop(uint8_t idx, uint8_t* r, uint8_t* g, uint8_t* b)
+{
+	assert(idx>=0 && idx<LEDS_TOP);
+	uint32_t col = _ws2811->channel[0].leds[LEDS_LEFT+idx];
+	*r = (col >> 16) & 0xff;
+	*g = (col >>  8) & 0xff;
+	*b = (col >>  0) & 0xff;
+}
 
 void AmbiPi::setColorBottom(uint8_t idx, uint8_t r, uint8_t g, uint8_t b)
 {
@@ -247,6 +256,25 @@ int AmbiPi::drawTestPattern(int i)
 int AmbiPi::ledCount() const
 {
 	return LEDS_LEFT + LEDS_TOP + LEDS_RIGHT + LEDS_BOTTOM;
+}
+
+int AmbiPi::knightrider(int cnt)
+{
+	// clear();
+	int p = (1+sin(cnt*M_PI/90.)) * 0.5 * (LEDS_TOP-1);
+	
+	double a = 0.9;
+	uint8_t r,g,b;
+	for (int i=0; i<LEDS_TOP; i++) {
+		getColorTop(i, &r, &g, &b);
+		r *= a;
+		g *= a;
+		b *= a;
+		setColorTop(i, r, g, b);		
+	}
+	setColorTop(p, 0xff, 0, 0);
+	
+	return 25;
 }
 
 int AmbiPi::vegas(int cnt)
@@ -421,28 +449,28 @@ void AmbiPi::updateCropRect(cv::Mat frame)
 
 	// gray.convertTo(gray, -1, 8, 0);
 	
-	for (i=0; i<gray.cols/2;i++) {
+	for (i=0; i<gray.cols*0.2;i++) {
 		if (cv::countNonZero(gray(cv::Rect(i,0,1,gray.rows))) > 0) {
 			break;
 		}
 	}
 	minX = i;
 
-	for (i=gray.cols-1; i>gray.cols/2;i--) {
+	for (i=gray.cols-1; i>gray.cols*0.8;i--) {
 		if (cv::countNonZero(gray(cv::Rect(i,0,1,gray.rows))) > 0) {
 			break;
 		}
 	}
 	maxX = i;
 
-	for (i=0; i<gray.rows/2;i++) {
+	for (i=0; i<gray.rows*0.2;i++) {
 		if (cv::countNonZero(gray(cv::Rect(0,i,gray.cols,1))) > 0) {
 			break;
 		}
 	}
 	minY = i;
 
-	for (i=gray.rows-1; i>gray.rows/2;i--) {
+	for (i=gray.rows-1; i>gray.rows*0.8;i--) {
 		if (cv::countNonZero(gray(cv::Rect(0,i,gray.cols,1))) > 0) {
 			break;
 		}
@@ -497,7 +525,7 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
 	int left  = LEDS_LEFT    - 2;
 	int right = LEDS_RIGHT   - 2;
 
-	double factor = 2.0;
+	double factor = 4.0;
 	double dw = factor * frame.cols / (double) top;
 	double dh = factor * frame.rows / (double) left;
 

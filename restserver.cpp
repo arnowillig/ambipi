@@ -178,6 +178,8 @@ void RESTServer::setMode(const Rest::Request& request, Http::ResponseWriter resp
 		_ambiPi->setMode(AmbiPi::Rainbow);
 	} else if (mode=="vegas") {
 		_ambiPi->setMode(AmbiPi::Vegas);
+	} else if (mode=="knightrider") {
+		_ambiPi->setMode(AmbiPi::Knightrider);
 	} else if (mode=="testpattern") {
 		_ambiPi->setMode(AmbiPi::TestPattern);
 	}
@@ -202,6 +204,8 @@ void RESTServer::getMode(const Rest::Request& request, Http::ResponseWriter resp
 		mode = "rainbow"; break;
 	case AmbiPi::Vegas:
 		mode = "vegas"; break;
+	case AmbiPi::Knightrider:
+		mode = "knightrider"; break;
 	case AmbiPi::TestPattern:
 		mode = "testpattern"; break;
 	default:

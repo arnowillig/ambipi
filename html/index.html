@@ -3,11 +3,12 @@
 		<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
 		<script src="/static/ambipi.js"></script>
 		<link rel="stylesheet" type="text/css" href="/static/ambipi.css" />
+		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimal-ui" />
 	</head>
 	<body>
 		<h1>AtariPi</h1>
 		<hr />
-		<img id="img" src="/api/screenshot.jpg" />
+		<img id="img" src="/api/screenshot.jpg" alt="Screenshot" class="responsive" />
 		<hr />
 		<div>
 		<input type="color" id="color" name="color" value="#e66465" />
@@ -17,6 +18,7 @@
 			<input type="button" id="ambilight" value="AmbiLight" />
 			<input type="button" id="rainbow" value="Rainbow" />
 			<input type="button" id="vegas" value="Las Vegas" />
+			<input type="button" id="knightrider" value="Knightrider" />
 			<input type="button" id="testpattern" value="Test pattern" />
 			<input type="button" id="white"   value="Warm White" />
 			<input type="button" id="off"     value="Off" />
@@ -36,10 +38,12 @@
 			<label for="gamma">Gamma: <span id="gammavalue">1.73</span></label>
 			<input type="range" min="0" max="10" value="1.73" class="slider" name="gamma" id="gamma" step="0.01" />
 		</div>
+<!--
 		<div>
 			<input type="button" id="crop0"    value="Clear Crop Rect" />
 			<input type="button" id="crop1"    value="Update Crop Rect" />
 		</div>
+-->
 		<ul>
 			<li><a href="http://ataripi.fritz.box:1880/">NodeRED</a></li>
 			<li><a href="http://ataripi.fritz.box:8080/">Kodi</a></li>

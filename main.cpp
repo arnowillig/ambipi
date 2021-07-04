@@ -73,8 +73,8 @@ int main(int argc, char *argv[])
 	std::thread restThread(&restServer, &server);
 
 	cv::Mat frame;
-	ambiPi.setMode(AmbiPi::Off);
-	AmbiPi::Mode lastMode = AmbiPi::Off;
+	ambiPi.setMode(AmbiPi::AmbiLight);
+	AmbiPi::Mode lastMode = AmbiPi::AmbiLight;
 	
 	cv::VideoCapture* capture = nullptr;
 	
@@ -111,6 +111,9 @@ int main(int argc, char *argv[])
 		case AmbiPi::Vegas:
 			sleep = ambiPi.vegas(i);
 			break;
+		case AmbiPi::Knightrider:
+			sleep = ambiPi.knightrider(i);
+			break;
 		case AmbiPi::TestPattern:
 			sleep = ambiPi.drawTestPattern(i);
 			break;
@@ -139,13 +142,15 @@ int main(int argc, char *argv[])
 				capture = new cv::VideoCapture(0);
 				capture->set(cv::CAP_PROP_FRAME_WIDTH,  720);
 				capture->set(cv::CAP_PROP_FRAME_HEIGHT, 480);
+//				capture->set(cv::CAP_PROP_FRAME_WIDTH,  1920);
+//				capture->set(cv::CAP_PROP_FRAME_HEIGHT, 1080);
 				capture->set(cv::CAP_PROP_FPS, 25);
 				if (!capture->isOpened()) {
 					fprintf(stderr, "Could not open capture device!\n");
 				}
 			}
 			if (!capture->grab()) {
-				sleep = 50;
+				sleep = 250;
 				fprintf(stderr, "No frame...\n");
 			} else {
 				capture->retrieve(frame);
@@ -155,6 +160,10 @@ int main(int argc, char *argv[])
 					capture = nullptr;
 					sleep = 100;
 				} else {
+					// cv::convert(frame, frame, cv::COLOR_BGR2RGB);
+					// int interpolation = cv::INTER_LINEAR; // INTER_CUBIC
+					// cv::resize(frame, frame, cv::Size(720,480), 0, 0, cv::INTER_LINEAR);
+					
 					ambiPi.setLastFrame(frame);
 					if (ambiPi.croppingEnabled()) {
 						ambiPi.updateCropRect(frame);
@@ -162,7 +171,7 @@ int main(int argc, char *argv[])
 					}
 					frame = ambiPi.cropBorders(frame, false);
 					ambiPi.calculateAmbilightFromFrame(frame);
-					sleep = 10;
+					sleep = 20;
 				}
 			}
 			break;
@@ -189,7 +198,7 @@ int main(int argc, char *argv[])
 			fprintf(stderr, "FPS: %d\n",fps);
 			t = t2;
 			fps = 0;
-			if (secs++%2==0) {
+			if (secs++%2==0 || true) {
 				ambiPi.setUpdateCropRect(true);
 			}
 		}

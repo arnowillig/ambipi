@@ -19,7 +19,8 @@ public:
 		Vegas,
 		TestPattern,
 		AmbiLight,
-		AmbiLight2
+		AmbiLight2,
+		Knightrider
 	};
 	enum Side {
 		Left = 0,
@@ -66,6 +67,7 @@ public:
 
 	void setColorLeft(uint8_t idx, uint8_t r, uint8_t g, uint8_t  b);
 	void setColorTop(uint8_t idx, uint8_t r, uint8_t g, uint8_t  b);
+	void getColorTop(uint8_t idx, uint8_t* r, uint8_t* g, uint8_t*  b);
 	void setColorBottom(uint8_t idx, uint8_t r, uint8_t g, uint8_t  b);
 	void setColorRight(uint8_t idx, uint8_t r, uint8_t g, uint8_t  b);
 	
@@ -74,6 +76,7 @@ public:
 	int drawTestPattern(int cnt);
 	int rainbow(int cnt);
 	int vegas(int cnt);
+	int knightrider(int cnt);
 
 	cv::Mat getDebugFrame(cv::Mat frame) const;
 #ifdef _GUI_

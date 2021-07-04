@@ -44,6 +44,9 @@ $(function() {
 	$("#vegas").click(function(data) {
 		$.get("/api/mode/vegas", function(data) { });
 	});
+	$("#knightrider").click(function(data) {
+		$.get("/api/mode/knightrider", function(data) { });
+	});
 	$("#testpattern").click(function(data) {
 		$.get("/api/mode/testpattern", function(data) { });
 	});
