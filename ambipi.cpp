@@ -537,13 +537,9 @@ void AmbiPi::calculateDisplayFrameFromFrame(cv::Mat frame)
 	cv::Mat squareFrame;
 	cv::resize(frame(cv::Rect((w-h)/2,0, h, h)), squareFrame, cv::Size(32, 32), 0, 0, interpolation);
 
-	// TODO Output frame
-	if (false) {
-		cv::Mat out;
-		cv::cvtColor(frame, out, cv::COLOR_RGB2BGR);
-		cv::imwrite("/home/pi/frame32x32.png", out);
-	}
-	sendFullFrame(squareFrame);
+	cv::Mat rgbFrame;
+	cv::cvtColor(frame, rgbFrame, cv::COLOR_RGB2BGR);
+	sendFullFrame(rgbFrame);
 }
 
 
