@@ -30,6 +30,13 @@ RESTServer::RESTServer(AmbiPi* ambiPi) : _ambiPi(ambiPi)
 	Rest::Routes::Get(_router, "/index.html",		Rest::Routes::bind(&RESTServer::getStaticHTML, this));
 	Rest::Routes::Get(_router, "/",				Rest::Routes::bind(&RESTServer::getStaticHTML, this));
 	Rest::Routes::Get(_router, "/static/*",                 Rest::Routes::bind(&RESTServer::getStaticHTML, this));
+
+
+        Rest::Routes::Options(_router, "/api/*",                 Rest::Routes::bind(&RESTServer::preflight, this));
+        Rest::Routes::Options(_router, "/api/*/*",                 Rest::Routes::bind(&RESTServer::preflight, this));
+        Rest::Routes::Options(_router, "/api/*/*/*",                 Rest::Routes::bind(&RESTServer::preflight, this));
+        Rest::Routes::Options(_router, "/api/*/*/*/*",                 Rest::Routes::bind(&RESTServer::preflight, this));
+        Rest::Routes::Options(_router, "/api/*/*/*/*/*",                 Rest::Routes::bind(&RESTServer::preflight, this));
 }
 
 void RESTServer::start(int port)
@@ -40,6 +47,14 @@ void RESTServer::start(int port)
 	server.init(opts);
 	server.setHandler(_router.handler());
 	server.serve();
+}
+
+void RESTServer::preflight(const Rest::Request& request, Http::ResponseWriter response)
+{
+        std::cout << "CORS: " << request.resource() << std::endl;
+        response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+        response.headers().add<Http::Header::AccessControlAllowHeaders>("*");
+        response.send(Http::Code::Ok);
 }
 
 void RESTServer::getStaticHTML(const Rest::Request& request, Http::ResponseWriter response)
@@ -53,6 +68,7 @@ void RESTServer::getStaticHTML(const Rest::Request& request, Http::ResponseWrite
 		Http::serveFile(response, _basePath + request.resource().substr(7));
 		return;
 	}
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Not_Found);
 }
 
@@ -70,6 +86,7 @@ void RESTServer::getScreenshot(const Rest::Request& request, Http::ResponseWrite
 	param[0] = cv::IMWRITE_JPEG_QUALITY;
 	param[1] = 95;
 	cv::imencode(".jpg", frame, buf, param);
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, std::string{buf.begin(), buf.end()}, MIME(Image, Jpeg));
 	// todo ..
 }
@@ -78,6 +95,7 @@ void RESTServer::getLEDs(const Rest::Request& request, Http::ResponseWriter resp
 {
 	(void) request;
 	std::string resp = ""; // std::to_string(alpha) + "\n";
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, resp);
 }
 
@@ -85,6 +103,7 @@ void RESTServer::setAlpha(const Rest::Request &request, Http::ResponseWriter res
 {
 	double alpha = request.param(":alpha").as<double>();
 	std::string resp = std::to_string(alpha) + "\n";
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, resp);
 	_ambiPi->setAlpha(alpha);
 }
@@ -93,6 +112,7 @@ void RESTServer::getAlpha(const Rest::Request &request, Http::ResponseWriter res
 {
 	(void) request;
 	std::string resp = std::to_string(_ambiPi->alpha()) + "\n";
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, resp);
 }
 
@@ -101,6 +121,7 @@ void RESTServer::setGamma(const Rest::Request &request, Http::ResponseWriter res
 {
 	double gamma = request.param(":gamma").as<double>();
 	std::string resp = std::to_string(gamma) + "\n";
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, resp);
 	_ambiPi->setGamma(gamma);
 }
@@ -109,6 +130,7 @@ void RESTServer::getGamma(const Rest::Request &request, Http::ResponseWriter res
 {
 	(void) request;
 	std::string resp = std::to_string(_ambiPi->gamma()) + "\n";
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, resp);
 }
 
@@ -116,6 +138,7 @@ void RESTServer::setCropping(const Rest::Request &request, Http::ResponseWriter 
 {
 	int crop = request.param(":crop").as<int>();
 	std::string resp = std::to_string(crop) + "\n";
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, resp);
 	_ambiPi->setUpdateCropRect(crop ? true : false);
 }
@@ -124,6 +147,7 @@ void RESTServer::getCropping(const Rest::Request &request, Http::ResponseWriter 
 {
 	(void) request;
 	std::string resp = std::to_string(_ambiPi->croppingEnabled() ? 1 : 0) + "\n";
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, resp);
 }
 
@@ -137,6 +161,7 @@ void RESTServer::setBrightness(const Rest::Request& request, Http::ResponseWrite
 
 	std::string resp = std::to_string(bri);
 	resp.append("\n");
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, resp);
 	_ambiPi->setBrightness(bri);
 }
@@ -146,7 +171,8 @@ void RESTServer::getBrightness(const Rest::Request& request, Http::ResponseWrite
 	(void) request;
 	int bri = (_ambiPi->brightness() * 100) / 255;
 
-	std::string resp = std::to_string(bri) + "\n";
+	std::string resp = "{ \"bri\": " + std::to_string(bri) + " }\n";
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, resp);
 }
 
@@ -156,6 +182,7 @@ void RESTServer::setColor(const Rest::Request& request, Http::ResponseWriter res
 	int g = request.param(":g").as<int>();
 	int b = request.param(":b").as<int>();
 	std::string resp = std::to_string(r) + "," + std::to_string(g) + "," + std::to_string(b) + "\n";
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, resp);
 	_ambiPi->setMode(AmbiPi::Color);
 	_ambiPi->setColor(r,g,b);
@@ -165,6 +192,7 @@ void RESTServer::setMode(const Rest::Request& request, Http::ResponseWriter resp
 {
 	std::string mode = request.param(":mode").as<std::string>();
 	std::string resp = mode + "\n";
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, resp);
 	if (mode=="off") {
 		_ambiPi->setMode(AmbiPi::Off);
@@ -211,5 +239,6 @@ void RESTServer::getMode(const Rest::Request& request, Http::ResponseWriter resp
 	default:
 		break;
 	}
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, mode + "\n");
 }
