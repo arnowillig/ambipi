@@ -3,6 +3,8 @@
 #include <array>
 #include <math.h>
 
+#include <arpa/inet.h>
+#include <unistd.h>
 #include "rpi_ws281x/ws2811.h"
 
 // 30 leds/meter
@@ -23,6 +25,13 @@
 #define WS2811_DMA              10
 #define MAX_BRIGHTNESS		255
 
+#ifdef DEVEL
+#define DISPLAY_SERVER "127.0.0.1"
+#else
+#define DISPLAY_SERVER "192.168.178.104"
+#endif
+#define DISPLAY_PORT   14000
+
 AmbiPi::AmbiPi() : _mode(Off), _alpha(0.85), _gamma(0), _enableCropping(false)
 {
 	uint8_t r = 0;
@@ -34,6 +43,7 @@ AmbiPi::AmbiPi() : _mode(Off), _alpha(0.85), _gamma(0), _enableCropping(false)
 	_colorsB = cv::Mat(1, LEDS_BOTTOM - a, CV_8UC3, cv::Scalar(b, g, r));
 	_colorsR = cv::Mat(LEDS_RIGHT - a, 1,  CV_8UC3, cv::Scalar(b, g, r));
 	clearLastFrame(0,0,0);
+	_enableDisplayVideo = false;
 }
 
 AmbiPi::~AmbiPi()
@@ -517,6 +527,71 @@ cv::Mat AmbiPi::cropBorders(cv::Mat frame, bool debug) const
 	return out;
 }
 
+void AmbiPi::calculateDisplayFrameFromFrame(cv::Mat frame)
+{
+	int w = frame.cols;
+	int h = frame.rows;
+
+	int interpolation = cv::INTER_LINEAR; // INTER_CUBIC
+
+	cv::Mat squareFrame;
+	cv::resize(frame(cv::Rect((w-h)/2,0, h, h)), squareFrame, cv::Size(32, 32), 0, 0, interpolation);
+
+	// TODO Output frame
+	if (false) {
+		cv::Mat out;
+		cv::cvtColor(frame, out, cv::COLOR_RGB2BGR);
+		cv::imwrite("/home/pi/frame32x32.png", out);
+	}
+	sendFullFrame(squareFrame);
+}
+
+
+
+bool AmbiPi::sendFullFrame(cv::Mat frame)
+{
+	uint16_t size = 32*32*3;
+	unsigned char buf[size+8];
+	buf[0] = 'K';
+	buf[1] = 'D';
+	buf[2] = (uint8_t) ((size>>8) & 0xff);
+	buf[3] = (uint8_t) ((size>>0) & 0xff);
+	buf[4] = 0xa0; // PRIO
+	buf[5] = 25;   // TTL
+	buf[6] = 0;    // TYPE
+	buf[7] = 0;    // SECT
+	memcpy(buf + 8, frame.ptr(0), 1024*3);
+
+	sendKDPDatagram(buf, sizeof(buf));
+	return true;
+}
+
+bool AmbiPi::sendKDPDatagram(const uint8_t* data, size_t size)
+{
+	sockaddr_in servaddr;
+	int fd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (fd<0) {
+		// qWarning("KickerDisplay::sendKDPDatagram() cannot open socket");
+		return false;
+	}
+
+	memset(&servaddr, 0, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;
+	servaddr.sin_addr.s_addr = inet_addr(DISPLAY_SERVER);
+	servaddr.sin_port = htons(DISPLAY_PORT);
+	int len = sendto(fd, data, size, 0, (sockaddr*)&servaddr, sizeof(servaddr));
+	if (len < 0) {
+		perror("Cannot send message");
+		::close(fd);
+		// qWarning("Display::sendKDPDatagram() failed");
+		return false;
+	}
+	::close(fd);
+	// qDebug("Display::sendKDPDatagram('%s:%d') %d/%ld bytes", DISPLAY_SERVER, DISPLAY_PORT, len, size);
+	return true;
+}
+
+
 void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
 {
 	// setColor(0,255,0);
@@ -594,4 +669,14 @@ cv::Mat AmbiPi::lastFrame() const
 	frame = _lastFrame.clone();
 	_mutex.unlock();
 	return frame;	
+}
+
+bool AmbiPi::getEnableDisplayVideo() const
+{
+	return _enableDisplayVideo;
+}
+
+void AmbiPi::setEnableDisplayVideo(bool enableDisplayVideo)
+{
+	_enableDisplayVideo = enableDisplayVideo;
 }

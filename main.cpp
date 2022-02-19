@@ -171,7 +171,10 @@ int main(int argc, char *argv[])
 					}
 					frame = ambiPi.cropBorders(frame, false);
 					ambiPi.calculateAmbilightFromFrame(frame);
-					sleep = 20;
+					if (ambiPi.getEnableDisplayVideo()) {
+						ambiPi.calculateDisplayFrameFromFrame(frame);
+					}
+					sleep = 10;
 				}
 			}
 			break;
