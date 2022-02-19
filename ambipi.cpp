@@ -532,7 +532,7 @@ void AmbiPi::calculateDisplayFrameFromFrame(cv::Mat frame)
 	int w = frame.cols;
 	int h = frame.rows;
 
-	int interpolation = cv::INTER_LINEAR; // INTER_CUBIC
+	int interpolation = cv::INTER_CUBIC; // INTER_CUBIC
 
 	cv::Mat squareFrame;
 	cv::resize(frame(cv::Rect((w-h)/2,0, h, h)), squareFrame, cv::Size(32, 32), 0, 0, interpolation);
