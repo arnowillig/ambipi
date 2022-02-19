@@ -8,6 +8,8 @@ RESTServer::RESTServer(AmbiPi* ambiPi) : _ambiPi(ambiPi)
 {
 	_basePath = "/home/pi/src/ambipi/html";
 
+	Rest::Routes::Get(_router, "/api/display/:enabled",	Rest::Routes::bind(&RESTServer::setDisplay, this));
+
 	Rest::Routes::Get(_router, "/api/alpha/:alpha",		Rest::Routes::bind(&RESTServer::setAlpha, this));
 	Rest::Routes::Get(_router, "/api/alpha",		Rest::Routes::bind(&RESTServer::getAlpha, this));
 
@@ -241,4 +243,12 @@ void RESTServer::getMode(const Rest::Request& request, Http::ResponseWriter resp
 	}
 	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, mode + "\n");
+}
+
+void RESTServer::setDisplay(const Rest::Request &request, Http::ResponseWriter response)
+{
+	bool enabled = request.param(":enabled").as<bool>();
+	std::string resp = enabled ? "true\n" : "false\n";
+	response.send(Http::Code::Ok, resp);
+	_ambiPi->setEnableDisplayVideo(enabled);
 }

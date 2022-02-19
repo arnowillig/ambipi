@@ -83,6 +83,7 @@ public:
 	void drawGUI(cv::Mat frame);
 #endif
 	cv::Mat cropBorders(cv::Mat frame, bool debug) const;
+	void calculateDisplayFrameFromFrame(cv::Mat frame);
 	void calculateAmbilightFromFrame(cv::Mat frame, bool bgr=false);
 	void clear();
 	void render();
@@ -90,6 +91,9 @@ public:
 	
 	void setLastFrame(cv::Mat frame);
 	cv::Mat lastFrame() const;
+	bool getEnableDisplayVideo() const;
+	void setEnableDisplayVideo(bool enableDisplayVideo);
+
 private:
 	ws2811_t* _ws2811;
 	FrameBuffer* _fb;
@@ -104,6 +108,9 @@ private:
 	mutable std::mutex _mutex;
 	cv::Mat _lastFrame;
 	bool _enableCropping;
+	bool _enableDisplayVideo;
+	bool sendKDPDatagram(const uint8_t *data, size_t size);
+	bool sendFullFrame(cv::Mat frame);
 };
 
 #endif // AMBIPI_H
