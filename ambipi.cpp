@@ -532,7 +532,7 @@ void AmbiPi::calculateDisplayFrameFromFrame(cv::Mat frame)
 	int w = frame.cols;
 	int h = frame.rows;
 
-	int interpolation = cv::INTER_CUBIC; // INTER_CUBIC
+	int interpolation = cv::INTER_LANCZOS4; // INTER_CUBIC
 
 	cv::Mat squareFrame;
 	cv::resize(frame(cv::Rect((w-h)/2,0, h, h)), squareFrame, cv::Size(32, 32), 0, 0, interpolation);
@@ -552,7 +552,7 @@ bool AmbiPi::sendFullFrame(cv::Mat frame)
 	buf[1] = 'D';
 	buf[2] = (uint8_t) ((size>>8) & 0xff);
 	buf[3] = (uint8_t) ((size>>0) & 0xff);
-	buf[4] = 0xa0; // PRIO
+	buf[4] = 0x60; // PRIO
 	buf[5] = 25;   // TTL
 	buf[6] = 0;    // TYPE
 	buf[7] = 0;    // SECT
