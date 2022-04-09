@@ -552,7 +552,7 @@ bool AmbiPi::sendFullFrame(cv::Mat frame)
 	buf[1] = 'D';
 	buf[2] = (uint8_t) ((size>>8) & 0xff);
 	buf[3] = (uint8_t) ((size>>0) & 0xff);
-	buf[4] = 0x60; // PRIO
+	buf[4] = 0x82; // PRIO
 	buf[5] = 25;   // TTL
 	buf[6] = 0;    // TYPE
 	buf[7] = 0;    // SECT
