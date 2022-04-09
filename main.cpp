@@ -85,7 +85,7 @@ int main(int argc, char *argv[])
 	for (int i=0; running; i++) {
 		if (lastMode != ambiPi.mode()) {
 			lastMode = ambiPi.mode();
-			ambiPi.clearLastFrame(0,lastMode==AmbiPi::Off ? 0 : 255,0);
+			ambiPi.clearLastFrame(0, lastMode==AmbiPi::Off ? 0 : 255, 0);
 		}
 		
 		switch (ambiPi.mode()) {
@@ -104,6 +104,12 @@ int main(int argc, char *argv[])
 			break;
 		case AmbiPi::Color:
 			sleep = 100;
+			break;
+		case AmbiPi::LeftSide:
+			sleep = ambiPi.goal(i, true);
+			break;
+		case AmbiPi::RightSide:
+			sleep = ambiPi.goal(i, false);
 			break;
 		case AmbiPi::Rainbow:
 			sleep = ambiPi.rainbow(i);

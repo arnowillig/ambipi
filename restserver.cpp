@@ -212,6 +212,10 @@ void RESTServer::setMode(const Rest::Request& request, Http::ResponseWriter resp
 		_ambiPi->setMode(AmbiPi::Knightrider);
 	} else if (mode=="testpattern") {
 		_ambiPi->setMode(AmbiPi::TestPattern);
+	} else if (mode=="leftside") {
+		_ambiPi->setMode(AmbiPi::LeftSide);
+	} else if (mode=="rightside") {
+		_ambiPi->setMode(AmbiPi::RightSide);
 	}
 }
 
