@@ -206,6 +206,7 @@ void AmbiPi::setColorTop(uint8_t idx, uint8_t r, uint8_t g, uint8_t b)
 	assert(idx>=0 && idx<LEDS_TOP);
 	_ws2811->channel[0].leds[LEDS_LEFT+idx] = ((r & 0x0ff) << 16) | ((g & 0x0ff) << 8) | (b & 0x0ff);
 }
+
 void AmbiPi::getColorTop(uint8_t idx, uint8_t* r, uint8_t* g, uint8_t* b)
 {
 	assert(idx>=0 && idx<LEDS_TOP);
@@ -246,6 +247,7 @@ void AmbiPi::getRainbowColor(int pos, uint8_t& r, uint8_t& g, uint8_t& b)
 		b = 255-pos*3;
 	}
 } 
+
 int AmbiPi::drawTestPattern(int i)
 {
 	uint8_t r,g,b;
@@ -280,7 +282,7 @@ int AmbiPi::knightrider(int cnt)
 		r *= a;
 		g *= a;
 		b *= a;
-		setColorTop(i, r, g, b);		
+		setColorTop(i, r, g, b);
 	}
 	setColorTop(p, 0xff, 0, 0);
 	
@@ -311,6 +313,46 @@ int AmbiPi::vegas(int cnt)
 		setColor(i,r,g,b);
 	}
 	return 100;
+}
+
+int AmbiPi::goal(int cnt, bool leftSide)
+{
+	// BottomMid to Left To Top to TopMid
+	(void) cnt;
+	(void) leftSide;
+
+	uint8_t r,g,b;
+	int c = ledCount();
+	if (leftSide) {
+		r = 255;
+		g = 0;
+		b = 0;
+	} else {
+		r = 0;
+		g = 0;
+		b = 255;
+	}
+	uint8_t pos = cnt % c;
+	fadeColors(0.75);
+	setColor(pos, r, g, b);
+	return 25;
+}
+
+void AmbiPi::fadeColors(float pct)
+{
+	uint8_t r,g,b;
+	for (int j=0; j<2; j++) {
+		for (int i=0; i<_ws2811->channel[j].count; i++) {
+			uint32_t col = _ws2811->channel[j].leds[i];
+			r = (col >> 16) & 0xff;
+			g = (col >>  8) & 0xff;
+			b = (col >>  0) & 0xff;
+			r *= pct;
+			g *= pct;
+			r *= pct;
+			_ws2811->channel[j].leds[i] = ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff);
+		}
+	}
 }
 
 int AmbiPi::rainbow(int cnt)
@@ -664,7 +706,7 @@ cv::Mat AmbiPi::lastFrame() const
 	_mutex.lock();
 	frame = _lastFrame.clone();
 	_mutex.unlock();
-	return frame;	
+	return frame;
 }
 
 bool AmbiPi::getEnableDisplayVideo() const

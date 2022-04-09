@@ -16,6 +16,8 @@ public:
 		White,
 		Color,
 		Rainbow,
+		LeftSide,
+		RightSide,
 		Vegas,
 		TestPattern,
 		AmbiLight,
@@ -77,6 +79,7 @@ public:
 	int rainbow(int cnt);
 	int vegas(int cnt);
 	int knightrider(int cnt);
+	int goal(int cnt, bool leftSide);
 
 	cv::Mat getDebugFrame(cv::Mat frame) const;
 #ifdef _GUI_
@@ -93,7 +96,7 @@ public:
 	cv::Mat lastFrame() const;
 	bool getEnableDisplayVideo() const;
 	void setEnableDisplayVideo(bool enableDisplayVideo);
-
+	void fadeColors(float pct);
 private:
 	ws2811_t* _ws2811;
 	FrameBuffer* _fb;
