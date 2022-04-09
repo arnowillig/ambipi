@@ -82,10 +82,12 @@ int main(int argc, char *argv[])
 	int secs = 0;
 	int fps = 0;
 	int sleep;
+	int cnt = 0;
 	for (int i=0; running; i++) {
 		if (lastMode != ambiPi.mode()) {
 			lastMode = ambiPi.mode();
 			ambiPi.clearLastFrame(0, lastMode==AmbiPi::Off ? 0 : 255, 0);
+			cnt = 0;
 		}
 		
 		switch (ambiPi.mode()) {
@@ -106,10 +108,10 @@ int main(int argc, char *argv[])
 			sleep = 100;
 			break;
 		case AmbiPi::LeftSide:
-			sleep = ambiPi.goal(i, true);
+			sleep = ambiPi.goal(cnt, true);
 			break;
 		case AmbiPi::RightSide:
-			sleep = ambiPi.goal(i, false);
+			sleep = ambiPi.goal(cnt, false);
 			break;
 		case AmbiPi::Rainbow:
 			sleep = ambiPi.rainbow(i);
@@ -220,6 +222,7 @@ int main(int argc, char *argv[])
 			pauseVideo = !pauseVideo;
 		}
 #endif
+		cnt++;
 	}
 
 	fprintf(stderr, "Stopping AmbiPi..\n");

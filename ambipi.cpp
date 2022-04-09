@@ -318,24 +318,25 @@ int AmbiPi::vegas(int cnt)
 int AmbiPi::goal(int cnt, bool leftSide)
 {
 	// BottomMid to Left To Top to TopMid
-	(void) cnt;
-	(void) leftSide;
-
-	uint8_t r,g,b;
-	int c = ledCount();
+	uint8_t r,g,b, pos;
+	int lc = ledCount();
+	int lc2 = lc/2;
+	int cc = cnt % lc2;
+	
 	if (leftSide) {
-		r = 255;
-		g = 0;
-		b = 0;
-	} else {
 		r = 0;
 		g = 0;
 		b = 255;
+		pos = (cc - LEDS_BOTTOM/2 + lc) % lc;
+	} else {
+		r = 255;
+		g = 0;
+		b = 0;
+		pos = ((lc-cc) - LEDS_BOTTOM/2 + lc) % lc;
 	}
-	uint8_t pos = cnt % c;
-	fadeColors(0.75);
+	fadeColors(0.97);
 	setColor(pos, r, g, b);
-	return 25;
+	return 10;
 }
 
 void AmbiPi::fadeColors(float pct)
@@ -349,7 +350,7 @@ void AmbiPi::fadeColors(float pct)
 			b = (col >>  0) & 0xff;
 			r *= pct;
 			g *= pct;
-			r *= pct;
+			b *= pct;
 			_ws2811->channel[j].leds[i] = ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff);
 		}
 	}
