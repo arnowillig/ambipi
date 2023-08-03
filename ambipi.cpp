@@ -30,7 +30,8 @@
 #else
 #define DISPLAY_SERVER "192.168.178.46"
 #endif
-#define DISPLAY_PORT   14000
+#define DISPLAY_PORT 14000
+#define DISPLAY_PRIO 0x82
 
 AmbiPi::AmbiPi() : _mode(Off), _alpha(0.85), _gamma(0), _enableCropping(false)
 {
@@ -585,8 +586,6 @@ void AmbiPi::calculateDisplayFrameFromFrame(cv::Mat frame)
 	sendFullFrame(rgbFrame);
 }
 
-
-
 bool AmbiPi::sendFullFrame(cv::Mat frame)
 {
 	uint16_t size = 32*32*3;
@@ -595,7 +594,7 @@ bool AmbiPi::sendFullFrame(cv::Mat frame)
 	buf[1] = 'D';
 	buf[2] = (uint8_t) ((size>>8) & 0xff);
 	buf[3] = (uint8_t) ((size>>0) & 0xff);
-	buf[4] = 0x82; // PRIO
+	buf[4] = DISPLAY_PRIO; // PRIO
 	buf[5] = 25;   // TTL
 	buf[6] = 0;    // TYPE
 	buf[7] = 0;    // SECT
