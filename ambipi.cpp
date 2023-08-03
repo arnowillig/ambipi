@@ -28,7 +28,7 @@
 #ifdef DEVEL
 #define DISPLAY_SERVER "127.0.0.1"
 #else
-#define DISPLAY_SERVER "192.168.178.104"
+#define DISPLAY_SERVER "192.168.178.46"
 #endif
 #define DISPLAY_PORT   14000
 
