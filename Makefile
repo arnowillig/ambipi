@@ -20,7 +20,8 @@ else
 	HAVE_DISPMANX = 0
 endif
 
-CFLAGS += -DHAVE_DISPMANX=$(HAVE_DISPMANX)
+CFLAGS += -DHAVE_DISPMANX=$(HAVE_DISPMANX) -std=c++2a
+LIBS += -lstdc++fs
 
 all: $(TARGET)
 
@@ -37,7 +38,7 @@ rpi_ws281x/build/libws2811.a:
 	@$(MAKE) -C rpi_ws281x/build
 
 pistache/build/src/libpistache.a:
-	@cd pistache; mkdir build; cd build; cmake ..
+	@cd pistache; mkdir build; cd build; cmake cmake -DPISTACHE_BUILD_TESTS=OFF ..
 	@$(MAKE) -C pistache/build
 
 clean:
