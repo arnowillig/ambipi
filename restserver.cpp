@@ -83,7 +83,10 @@ void RESTServer::handlePost(const Rest::Request& request, Http::ResponseWriter r
 		int g = color[1];
 		int b = color[2];
 		_ambiPi->setMode(AmbiPi::Color);
-		_ambiPi->setColor(r,g,b);		
+		_ambiPi->setColor(r,g,b);	
+		if (r==0 && g==0 & b==255) { //
+			_ambiPi->setMode(AmbiPi::AmbiLight);
+		}
 	} else if (cmd == "SetColorTemperature") {
 		int colorTemp = jsonBody.value("colorTemperatureInKelvin", 2700);
 		int r = 0;
@@ -126,7 +129,8 @@ void RESTServer::getScreenshot(const Rest::Request& request, Http::ResponseWrite
 	(void) request;
 	// cv::Mat frame = _ambiPi->frameBuffer()->grabFrame(2, true);
 	cv::Mat frame = _ambiPi->lastFrame();
-	frame = _ambiPi->cropBorders(frame, true);
+	cv::resize(frame, frame, cv::Size(320*3, 240*3), 0, 0, cv::INTER_LINEAR);
+//	frame = _ambiPi->cropBorders(frame, true);
 	
 	frame = _ambiPi->getDebugFrame(frame);
 

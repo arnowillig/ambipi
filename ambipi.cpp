@@ -28,7 +28,7 @@
 #define DISPLAY_PORT 14000
 #define DISPLAY_PRIO 0x82
 
-AmbiPi::AmbiPi() : _mode(Off), _alpha(0.85), _gamma(0), _enableCropping(false)
+AmbiPi::AmbiPi() : _mode(Off), _alpha(0.95), _gamma(0), _enableCropping(false)
 {
 	uint8_t r = 0;
 	uint8_t g = 0;
@@ -624,9 +624,58 @@ bool AmbiPi::sendKDPDatagram(const uint8_t* data, size_t size)
 	return true;
 }
 
-
+#if 0
 void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
 {
+//	cv::GaussianBlur(frame, frame, cv::Size(5, 5), 0);
+    int ledsTop    = LEDS_TOP - 2;
+    int ledsBottom = LEDS_BOTTOM - 2;
+    int ledsLeft   = LEDS_LEFT - 2;
+    int ledsRight  = LEDS_RIGHT - 2;
+
+    double factor = 4.0;
+    int dw = static_cast<int>(factor * frame.cols / ledsTop);
+    int dh = static_cast<int>(factor * frame.rows / ledsLeft);
+
+    int interpolation = cv::INTER_LINEAR;
+    cv::resize(frame(cv::Rect(0, 0, frame.cols, dh)), _colorsT, cv::Size(ledsTop, 1), 0, 0, interpolation);
+    cv::resize(frame(cv::Rect(0, frame.rows - dh, frame.cols, dh)), _colorsB, cv::Size(ledsBottom, 1), 0, 0, interpolation);
+    cv::resize(frame(cv::Rect(0, 0, dw, frame.rows)), _colorsL, cv::Size(1, ledsLeft), 0, 0, interpolation);
+    cv::resize(frame(cv::Rect(frame.cols - dw, 0, dw, frame.rows)), _colorsR, cv::Size(1, ledsRight), 0, 0, interpolation);
+
+    int rIdx = bgr ? 0 : 2;
+    int gIdx = 1;
+    int bIdx = bgr ? 2 : 0;
+
+    // Left side
+    for (int i = 0; i < ledsLeft; ++i) {
+        auto c = _colorsL.at<cv::Vec3b>(i, 0);
+        setColorLeft(i + 1, c[rIdx], c[gIdx], c[bIdx]);
+    }
+
+    // Bottom side
+    for (int i = 0; i < ledsBottom; ++i) {
+        auto c = _colorsB.at<cv::Vec3b>(0, i);
+        setColorBottom(i + 1, c[rIdx], c[gIdx], c[bIdx]);
+    }
+
+    // Right side (reverse order)
+    for (int i = ledsRight - 1; i >= 0; --i) {
+        auto c = _colorsR.at<cv::Vec3b>(i, 0);
+        setColorRight(ledsRight - i, c[rIdx], c[gIdx], c[bIdx]);
+    }
+
+    // Top side (reverse order)
+    for (int i = ledsTop - 1; i >= 0; --i) {
+        auto c = _colorsT.at<cv::Vec3b>(0, i);
+        setColorTop(ledsTop - i, c[rIdx], c[gIdx], c[bIdx]);
+    }
+}
+
+#else
+void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
+{
+	
 	// setColor(0,255,0);
 	int top   = LEDS_TOP     - 2;
 	int bot   = LEDS_BOTTOM  - 2;
@@ -644,10 +693,12 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
 	cv::resize(frame(cv::Rect(0, frame.rows-dh, frame.cols, dh)), colorsBottom, cv::Size(bot, 1), 0, 0, interpolation);
 	cv::resize(frame(cv::Rect(0,0, dw, frame.rows)), colorsLeft, cv::Size(1, left), 0, 0, interpolation);
 	cv::resize(frame(cv::Rect(frame.cols-dw, 0, dw, frame.rows)), colorsRight, cv::Size(1, right), 0, 0, interpolation);
+
 	cv::addWeighted(_colorsT, _alpha, colorsTop,    1.0 - _alpha, 0.0, _colorsT);
 	cv::addWeighted(_colorsB, _alpha, colorsBottom, 1.0 - _alpha, 0.0, _colorsB);
 	cv::addWeighted(_colorsL, _alpha, colorsLeft,   1.0 - _alpha, 0.0, _colorsL);
 	cv::addWeighted(_colorsR, _alpha, colorsRight,  1.0 - _alpha, 0.0, _colorsR);
+
 	cv::Vec3b c;
 	int r,g,b;
 	if (bgr) {
@@ -677,7 +728,7 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
 		c = _colorsR.at<cv::Vec3b>(cv::Point(0, i));
 		setColorRight(i+1, c[r], c[g], c[b]);
 	}
-	setColorRight(0, c[r], c[g], c[b]);
+	setColorRight(0,        c[r], c[g], c[b]);
 	setColorTop(LEDS_TOP-1, c[r], c[g], c[b]);
 
 	for (int i=LEDS_TOP-3; i>=0; i--) {
@@ -687,6 +738,7 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
 	setColorTop( 0, c[r], c[g], c[b]);
 	setColorLeft(0, c[r], c[g], c[b]);
 }
+#endif
 
 void AmbiPi::setLastFrame(cv::Mat frame)
 {

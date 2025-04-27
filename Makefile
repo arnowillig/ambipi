@@ -52,3 +52,10 @@ run:	ambipi
 
 restart: $(TARGET)
 	sudo service ambipi restart
+
+log: $(TARGET)
+	sudo journalctl --vacuum-time=1s -u ambipi.service
+	sudo journalctl --rotate  -u ambipi.service
+	sudo journalctl -u ambipi.service
+
+	
