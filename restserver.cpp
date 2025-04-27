@@ -54,30 +54,45 @@ void RESTServer::start(int port)
 	server.serve();
 }
 
+static void kelvinToRGB(int kelvin, int& r, int& g, int& b)
+{
+    double t = kelvin / 100.0;
+    r = (t <= 66) ? 255 : std::clamp(int(329.698727446 * pow(t - 60, -0.1332047592)), 0, 255);
+    g = (t <= 66) ? std::clamp(int(99.4708025861 * log(t) - 161.1195681661), 0, 255) : std::clamp(int(288.1221695283 * pow(t - 60, -0.0755148492)), 0, 255);
+    b = (t >= 66) ? 255 : (t <= 19) ? 0 : std::clamp(int(138.5177312231 * log(t - 10) - 305.0447927307), 0, 255);
+}
+
 void RESTServer::handlePost(const Rest::Request& request, Http::ResponseWriter response)
 {
-	std::string body = request.body();
 	auto jsonBody = nlohmann::json::parse(request.body());
-	std::string powerState = jsonBody.value("powerState", "UNKNOWN");
-	int brightness = jsonBody.value("brightness", -1);
-	if (brightness>=0) {
-		int bri = (brightness * 255) / 100;
-		_ambiPi->setBrightness(bri);
-	}
-	if (powerState == "OFF") {
+	std::string cmd = jsonBody.value("directive", "unknown");
+	
+//	std::string powerState = jsonBody.value("powerState", "UNKNOWN"); // Currently not used
+
+	if (cmd == "TurnOff") {
 		_ambiPi->setMode(AmbiPi::Off);
-	} else if (powerState == "ON") {
+	} else if (cmd == "TurnOn") {
 		_ambiPi->setMode(AmbiPi::White);
-	}	
-	// if (jsonBody.contains("color_rgb")) {
-	if (jsonBody.find("color_rgb") != jsonBody.end()) {
+	} else if (cmd == "SetBrightness") {
+		int brightness = jsonBody.value("brightness", 0);
+		int bri = (brightness * 255) / 100;
+		_ambiPi->setBrightness(bri);		
+	} else if (cmd == "SetColor") {
 		auto color = jsonBody["color_rgb"];
 		int r = color[0];
 		int g = color[1];
-		int b = color[1];
-		// std::string resp = std::to_string(r) + "," + std::to_string(g) + "," + std::to_string(b) + "\n";
+		int b = color[2];
 		_ambiPi->setMode(AmbiPi::Color);
-	        _ambiPi->setColor(r,g,b);
+		_ambiPi->setColor(r,g,b);		
+	} else if (cmd == "SetColorTemperature") {
+		int colorTemp = jsonBody.value("colorTemperatureInKelvin", 2700);
+		int r = 0;
+		int g = 0;
+		int b = 0;
+		kelvinToRGB(colorTemp, r, g, b);
+		_ambiPi->setMode(AmbiPi::Color);
+		_ambiPi->setColor(r,g,b);
+	} else {
 	}
 	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, "");
