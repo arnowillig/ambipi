@@ -20,6 +20,7 @@ public:
 	RESTServer(AmbiPi* ambiPi);
 	void start(int port);
 
+	void handlePost(const Rest::Request &request, Http::ResponseWriter response);
 	void preflight(const Rest::Request &request, Http::ResponseWriter response);
 	void setAlpha(const Rest::Request &request, Http::ResponseWriter response);
 	void getAlpha(const Rest::Request &request, Http::ResponseWriter response);

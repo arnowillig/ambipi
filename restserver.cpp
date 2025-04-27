@@ -1,13 +1,16 @@
 #include "restserver.h"
 #include "framebuffer.h"
+#include "json.hpp"
 #include <algorithm>
-
+// #include <nlohmann/json.hpp>
 
 
 RESTServer::RESTServer(AmbiPi* ambiPi) : _ambiPi(ambiPi)
 {
 	_basePath = "/home/pi/src/ambipi/html";
 
+	Rest::Routes::Post(_router, "/api",                     Rest::Routes::bind(&RESTServer::handlePost, this));
+	
 	Rest::Routes::Get(_router, "/api/display/:enabled",	Rest::Routes::bind(&RESTServer::setDisplay, this));
 
 	Rest::Routes::Get(_router, "/api/alpha/:alpha",		Rest::Routes::bind(&RESTServer::setAlpha, this));
@@ -49,6 +52,35 @@ void RESTServer::start(int port)
 	server.init(opts);
 	server.setHandler(_router.handler());
 	server.serve();
+}
+
+void RESTServer::handlePost(const Rest::Request& request, Http::ResponseWriter response)
+{
+	std::string body = request.body();
+	auto jsonBody = nlohmann::json::parse(request.body());
+	std::string powerState = jsonBody.value("powerState", "UNKNOWN");
+	int brightness = jsonBody.value("brightness", -1);
+	if (brightness>=0) {
+		int bri = (brightness * 255) / 100;
+		_ambiPi->setBrightness(bri);
+	}
+	if (powerState == "OFF") {
+		_ambiPi->setMode(AmbiPi::Off);
+	} else if (powerState == "ON") {
+		_ambiPi->setMode(AmbiPi::White);
+	}	
+	// if (jsonBody.contains("color_rgb")) {
+	if (jsonBody.find("color_rgb") != jsonBody.end()) {
+		auto color = jsonBody["color_rgb"];
+		int r = color[0];
+		int g = color[1];
+		int b = color[1];
+		// std::string resp = std::to_string(r) + "," + std::to_string(g) + "," + std::to_string(b) + "\n";
+		_ambiPi->setMode(AmbiPi::Color);
+	        _ambiPi->setColor(r,g,b);
+	}
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, "");
 }
 
 void RESTServer::preflight(const Rest::Request& request, Http::ResponseWriter response)

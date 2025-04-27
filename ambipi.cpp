@@ -14,11 +14,6 @@
 #define LEDS_LEFT	(34)
 #define LEDS_RIGHT	(34)
 
-//#define LEDS_TOP	(16)
-//#define LEDS_BOTTOM	(16)
-//#define LEDS_LEFT	(9)
-//#define LEDS_RIGHT	(9)
-
 #define TARGET_FREQ             WS2811_TARGET_FREQ
 #define GPIO_PIN1               12
 #define GPIO_PIN2               13

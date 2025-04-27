@@ -52,4 +52,3 @@ run:	ambipi
 
 restart: $(TARGET)
 	sudo service ambipi restart
-	
