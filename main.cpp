@@ -148,13 +148,18 @@ int main(int argc, char *argv[])
 		case AmbiPi::AmbiLight:
 			if (!capture) {
 				capture = new cv::VideoCapture(0);
-				capture->set(cv::CAP_PROP_FRAME_WIDTH,  320);
-				capture->set(cv::CAP_PROP_FRAME_HEIGHT, 240);
-//				capture->set(cv::CAP_PROP_FRAME_WIDTH,  720);
-//				capture->set(cv::CAP_PROP_FRAME_HEIGHT, 480);
+#if 1
+				capture->set(cv::CAP_PROP_FRAME_WIDTH,  160);
+				capture->set(cv::CAP_PROP_FRAME_HEIGHT, 120);
+#else
+				capture->set(cv::CAP_PROP_FRAME_WIDTH,  720);
+				capture->set(cv::CAP_PROP_FRAME_HEIGHT, 480);
+#endif				
 //				capture->set(cv::CAP_PROP_FRAME_WIDTH,  1920);
 //				capture->set(cv::CAP_PROP_FRAME_HEIGHT, 1080);
 				capture->set(cv::CAP_PROP_FPS, 30);
+//				capture->open(0, cv::CAP_V4L2);
+				
 				if (!capture->isOpened()) {
 					fprintf(stderr, "Could not open capture device!\n");
 				}
@@ -173,7 +178,11 @@ int main(int argc, char *argv[])
 					// cv::convert(frame, frame, cv::COLOR_BGR2RGB);
 					// int interpolation = cv::INTER_LINEAR; // INTER_CUBIC
 					// cv::resize(frame, frame, cv::Size(720,480), 0, 0, cv::INTER_LINEAR);
-					
+/*					static int x = 0;
+					if (++x=100) {
+						imwrite("/home/pi/test.jpg", frame);
+					}
+*/					
 					ambiPi.setLastFrame(frame);
 /*					
 					if (ambiPi.croppingEnabled()) {
@@ -186,7 +195,7 @@ int main(int argc, char *argv[])
 					if (ambiPi.getEnableDisplayVideo()) {
 						ambiPi.calculateDisplayFrameFromFrame(frame);
 					}
-					sleep = 40;
+					sleep = 10;
 				}
 			}
 			break;

@@ -28,7 +28,7 @@
 #define DISPLAY_PORT 14000
 #define DISPLAY_PRIO 0x82
 
-AmbiPi::AmbiPi() : _mode(Off), _alpha(0.95), _gamma(0), _enableCropping(false)
+AmbiPi::AmbiPi() : _mode(Off), _alpha(0.5), _gamma(0), _enableCropping(false)
 {
 	uint8_t r = 0;
 	uint8_t g = 0;
@@ -687,7 +687,9 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
 	double dh = factor * frame.rows / (double) left;
 
 
-	int interpolation = cv::INTER_LINEAR; // INTER_CUBIC
+//	int interpolation = cv::INTER_LINEAR; // INTER_CUBIC
+//	int interpolation = cv::INTER_CUBIC;
+	int interpolation = cv::INTER_AREA;
 	cv::Mat colorsTop, colorsBottom, colorsLeft, colorsRight;
 	cv::resize(frame(cv::Rect(0,0,frame.cols, dh)), colorsTop, cv::Size(top, 1), 0, 0, interpolation);
 	cv::resize(frame(cv::Rect(0, frame.rows-dh, frame.cols, dh)), colorsBottom, cv::Size(bot, 1), 0, 0, interpolation);
