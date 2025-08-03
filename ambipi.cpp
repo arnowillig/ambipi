@@ -31,6 +31,20 @@
 #define DISPLAY_PORT 14000
 #define DISPLAY_PRIO 0x82
 
+std::vector<uint8_t> buildGammaLUT(float gamma_factor) {
+    std::vector<uint8_t> lut(256);
+    for (int i = 0; i < 256; ++i) {
+        float normalized = i / 255.0f;
+        float corrected = std::pow(normalized, gamma_factor);
+        int out = static_cast<int>(corrected * 255.0f + 0.5f);
+        if (out < 0) out = 0;
+        if (out > 255) out = 255;
+        lut[i] = static_cast<uint8_t>(out);
+    }
+    return lut;
+}
+
+
 AmbiPi::AmbiPi() : _mode(Off), _alpha(0.5), _gamma(0), _enableCropping(false)
 {
 	uint8_t r = 0;
@@ -133,6 +147,7 @@ void AmbiPi::setGamma(double gamma)
 	_gamma = gamma;
 	if (gamma != 0) {
 		ws2811_set_custom_gamma_factor(_ws2811, gamma);
+		_lut = buildGammaLUT(gamma); 
 	}
 }
 
@@ -371,11 +386,14 @@ int AmbiPi::rainbow(int cnt)
 	return 25;
 }
 
-static inline void unpackRgb(uint32_t packed, uint8_t &r, uint8_t &g, uint8_t &b)
+void AmbiPi::unpackRgb(uint32_t packed, uint8_t &r, uint8_t &g, uint8_t &b)
 {
     r = (packed >> 16) & 0xFF;
     g = (packed >> 8) & 0xFF;
     b = packed & 0xFF;
+    r = _lut[r];
+    g = _lut[g];
+    b = _lut[b];
 }
 
 static inline uint8_t lerp8(uint8_t a, uint8_t b, float t)
