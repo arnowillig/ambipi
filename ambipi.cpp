@@ -2,10 +2,13 @@
 #include "unistd.h"
 #include <array>
 #include <math.h>
-
+#include <netdb.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include "rpi_ws281x/ws2811.h"
+
 
 // 30 leds/meter
 
@@ -40,6 +43,7 @@ AmbiPi::AmbiPi() : _mode(Off), _alpha(0.5), _gamma(0), _enableCropping(false)
 	_colorsR = cv::Mat(LEDS_RIGHT - a, 1,  CV_8UC3, cv::Scalar(b, g, r));
 	clearLastFrame(0,0,0);
 	_enableDisplayVideo = false;
+	_enableGamingTable = false;
 }
 
 AmbiPi::~AmbiPi()
@@ -170,11 +174,14 @@ void AmbiPi::setColorLeft(uint8_t r, uint8_t g, uint8_t  b)
 	}
 }
 
+
+
+
 void AmbiPi::setColorTop(uint8_t r, uint8_t g, uint8_t  b)
 {
 	for (int i=0; i < LEDS_TOP; i++) {
 		_ws2811->channel[0].leds[LEDS_LEFT+i] = ((r & 0x0ff) << 16) | ((g & 0x0ff) << 8) | (b & 0x0ff);
-	}
+	}	
 }
 
 void AmbiPi::setColorBottom(uint8_t r, uint8_t g, uint8_t  b)
@@ -364,6 +371,125 @@ int AmbiPi::rainbow(int cnt)
 	return 25;
 }
 
+static inline void unpackRgb(uint32_t packed, uint8_t &r, uint8_t &g, uint8_t &b)
+{
+    r = (packed >> 16) & 0xFF;
+    g = (packed >> 8) & 0xFF;
+    b = packed & 0xFF;
+}
+
+static inline uint8_t lerp8(uint8_t a, uint8_t b, float t)
+{
+    return static_cast<uint8_t>(std::round(a + (b - a) * t));
+}
+
+std::vector<uint8_t> stretchAndInterpolate(const std::vector<uint8_t>& input, size_t target_leds)
+{
+    size_t source_leds = input.size() / 3;
+    std::vector<uint8_t> output;
+    if (source_leds == 0 || target_leds == 0) return output;
+    output.reserve(target_leds * 3);
+
+    for (size_t i = 0; i < target_leds; ++i) {
+        // Position im Raum der Quelle: von 0..source_leds-1
+        float pos = (source_leds == 1) ? 0.0f : (static_cast<float>(i) * (source_leds - 1)) / (target_leds - 1);
+        size_t idx_low = static_cast<size_t>(std::floor(pos));
+        size_t idx_high = static_cast<size_t>(std::min<float>(source_leds - 1, std::ceil(pos)));
+        float t = pos - idx_low;
+
+        uint8_t r0 = input[3 * idx_low + 0];
+        uint8_t g0 = input[3 * idx_low + 1];
+        uint8_t b0 = input[3 * idx_low + 2];
+        uint8_t r1 = input[3 * idx_high + 0];
+        uint8_t g1 = input[3 * idx_high + 1];
+        uint8_t b1 = input[3 * idx_high + 2];
+
+        uint8_t r = lerp8(r0, r1, t);
+        uint8_t g = lerp8(g0, g1, t);
+        uint8_t b = lerp8(b0, b1, t);
+
+        output.push_back(r);
+        output.push_back(g);
+        output.push_back(b);
+    }
+    return output;
+}
+
+bool sendWledDnRgbRange(const char* host, const char* port, uint16_t startIndex, const std::vector<uint8_t>& rgb_values, uint8_t timeout_seconds = 1)
+{
+    if (rgb_values.size() % 3 != 0) {
+        std::cerr << "[ERROR] rgb_values Länge muss ein Vielfaches von 3 sein.\n";
+        return false;
+    }
+    size_t ledCount = rgb_values.size() / 3;
+    if (ledCount == 0) {
+        std::cerr << "[WARN] Keine LEDs zu senden.\n";
+        return true;
+    }
+
+    // Begrenze Größe: typisches UDP-Limit im LAN, splitte ansonsten
+    const size_t max_payload = 512; // sicherer Bereich; 4 + 2 + 3*LEDs sollte <= 512 sein
+    size_t needed = 1 + 1 + 2 + 3 * ledCount; // mode + timeout + start hi/lo + RGBs
+    if (needed > max_payload) {
+        std::cerr << "[INFO] Paket zu groß (" << needed << " Bytes), in Chunks aufteilen.\n";
+        // Teile in kleinere Stücke auf, z.B.  (max_leds_per = floor((max_payload -4)/3))
+        size_t max_leds_per = (max_payload - 4) / 3;
+        for (size_t offset = 0; offset < ledCount; offset += max_leds_per) {
+            size_t chunk = std::min(max_leds_per, ledCount - offset);
+            std::vector<uint8_t> sub(rgb_values.begin() + offset * 3,
+                                     rgb_values.begin() + (offset + chunk) * 3);
+            if (!sendWledDnRgbRange(host, port, startIndex + offset, sub, timeout_seconds)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    std::vector<uint8_t> packet;
+    packet.reserve(needed);
+    packet.push_back(4); // DNRGB mode
+    packet.push_back(timeout_seconds);
+    packet.push_back(static_cast<uint8_t>((startIndex >> 8) & 0xFF));
+    packet.push_back(static_cast<uint8_t>(startIndex & 0xFF));
+    packet.insert(packet.end(), rgb_values.begin(), rgb_values.end());
+
+    struct addrinfo hints{};
+    struct addrinfo* res = nullptr;
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_DGRAM;
+
+    int rc = getaddrinfo(host, port, &hints, &res);
+    if (rc != 0) {
+        std::cerr << "[ERROR] getaddrinfo fehlgeschlagen: " << gai_strerror(rc) << "\n";
+        return false;
+    }
+    int sock = -1;
+    struct addrinfo* p;
+    for (p = res; p != nullptr; p = p->ai_next) {
+        sock = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+        if (sock == -1) continue;
+        break;
+    }
+    if (p == nullptr || sock == -1) {
+        std::cerr << "[ERROR] Konnte keinen Socket erzeugen.\n";
+        freeaddrinfo(res);
+        return false;
+    }
+
+    ssize_t sent = sendto(sock, packet.data(), packet.size(), 0, p->ai_addr, p->ai_addrlen);
+    if (sent != (ssize_t)packet.size()) {
+        std::cerr << "[ERROR] sendto fehlgeschlagen: " << strerror(errno)
+                  << " gesendet: " << sent << " von " << packet.size() << "\n";
+        close(sock);
+        freeaddrinfo(res);
+        return false;
+    }
+
+    close(sock);
+    freeaddrinfo(res);
+    return true;
+}
+
 void AmbiPi::render()
 {
 #ifdef _GUI_
@@ -371,6 +497,53 @@ void AmbiPi::render()
 #endif
 	// ws2811_wait(_ws2811);
 	ws2811_render(_ws2811);
+if (_enableGamingTable) {	
+    const char* host = "192.168.178.150";
+    const char* port = "21324";
+
+    // --- Top LEDs: aus channel[0].leds[LEDS_LEFT .. LEDS_LEFT+LEDS_TOP)
+    {
+        uint16_t startIndex = 0;
+        std::vector<uint8_t> rgbTop;
+        rgbTop.reserve(3 * LEDS_TOP);
+        for (int i = 0; i < LEDS_TOP; ++i) {
+            uint32_t pix = _ws2811->channel[0].leds[LEDS_LEFT + i];
+            uint8_t r, g, b;
+            unpackRgb(pix, r, g, b);
+            rgbTop.push_back(r);
+            rgbTop.push_back(g);
+            rgbTop.push_back(b);
+        }
+        
+        rgbTop = stretchAndInterpolate(rgbTop, 86);
+
+        bool okTop = sendWledDnRgbRange(host, port, startIndex, rgbTop);
+        if (!okTop) {
+            std::cerr << "[WARN] DNRGB Top senden fehlgeschlagen.\n";
+        }
+    }
+
+    // --- Bottom LEDs: aus channel[1].leds[0 .. LEDS_BOTTOM)
+    {
+        uint16_t startIndex = 86;
+        std::vector<uint8_t> rgbBottom;
+        rgbBottom.reserve(3 * LEDS_BOTTOM);
+        for (int i = LEDS_BOTTOM - 1; i >= 0; --i) {
+            uint32_t pix = _ws2811->channel[1].leds[i];
+            uint8_t r, g, b;
+            unpackRgb(pix, r, g, b);
+            rgbBottom.push_back(r);
+            rgbBottom.push_back(g);
+            rgbBottom.push_back(b);
+        }
+
+        rgbBottom = stretchAndInterpolate(rgbBottom, 86);
+        bool okBottom = sendWledDnRgbRange(host, port, startIndex, rgbBottom);
+        if (!okBottom) {
+            std::cerr << "[WARN] DNRGB Bottom senden fehlgeschlagen.\n";
+        }
+    }
+}
 }
 
 cv::Mat AmbiPi::getDebugFrame(cv::Mat frame) const
@@ -766,4 +939,14 @@ bool AmbiPi::getEnableDisplayVideo() const
 void AmbiPi::setEnableDisplayVideo(bool enableDisplayVideo)
 {
 	_enableDisplayVideo = enableDisplayVideo;
+}
+
+bool AmbiPi::getEnableGamingTable() const
+{
+	return _enableGamingTable;
+}
+
+void AmbiPi::setEnableGamingTable(bool enableGamingTable)
+{
+	_enableGamingTable = enableGamingTable;
 }

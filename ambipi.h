@@ -96,6 +96,8 @@ public:
 	cv::Mat lastFrame() const;
 	bool getEnableDisplayVideo() const;
 	void setEnableDisplayVideo(bool enableDisplayVideo);
+	bool getEnableGamingTable() const;
+	void setEnableGamingTable(bool enableGamingTable);
 	void fadeColors(float pct);
 private:
 	ws2811_t* _ws2811;
@@ -112,6 +114,7 @@ private:
 	cv::Mat _lastFrame;
 	bool _enableCropping;
 	bool _enableDisplayVideo;
+	bool _enableGamingTable;
 	bool sendKDPDatagram(const uint8_t *data, size_t size);
 	bool sendFullFrame(cv::Mat frame);
 };

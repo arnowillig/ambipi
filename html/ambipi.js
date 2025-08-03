@@ -2,15 +2,13 @@
 var newImage = new Image();
 
 function updateImage() {
-	if (newImage.complete) {
-		newImage.src = document.getElementById("img").src;
-		var temp = newImage.src;
-		document.getElementById("img").src = newImage.src;
-		newImage = new Image();
-		newImage.src = temp + "?" + new Date().getTime();
-	}
-	setTimeout(updateImage, 125);
-};
+    const img = document.getElementById("img");
+    const newImg = new Image();
+    newImg.onload = () => { img.src = newImg.src; };
+    newImg.onerror = () => { console.warn("Failed to load image."); };
+    // Cache-busting über Timestamp
+    newImg.src = "/api/screenshot.jpg?ts=" + Date.now();
+}
 
 function playpause()
 {
@@ -24,7 +22,12 @@ function hexToRgb(hex) {
 }
 
 $(function() {
-	updateImage();
+        setInterval(updateImage, 1000);
+
+	$("#img").click(function(data) {
+                updateImage();
+        });
+
 
 	$.get("/api/bri", function(data) {
 		$('#bri').val(parseInt(data));
