@@ -67,19 +67,22 @@ function updateImage(force = false) {
   lastTimestamp = now;
 
   const newImg = new Image();
-  updateStatus.textContent = "Updating...";
+  //updateStatus.textContent = "Updating...";
   newImg.onload = () => {
     imgEl.src = newImg.src;
     const d = new Date();
+    /*
     lastUpdated.textContent = d.toLocaleTimeString(undefined, {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit"
     });
+    
     updateStatus.textContent = "Live";
     setTimeout(() => {
       if (updateStatus.textContent === "Live") updateStatus.textContent = "";
-    }, 1500);
+    }, 3500);
+    */
   };
   newImg.onerror = () => {
     updateStatus.textContent = "Error";
