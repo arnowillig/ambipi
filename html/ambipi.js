@@ -1,101 +1,262 @@
+// ambipi.js
+// Vanilla JS version of the original functionality, with enhancements:
+// - Visibility-aware screenshot updates
+// - Theme toggle (light/dark) persisted
+// - Debounced slider network calls
+// - Display/Table toggles with sync
+// - Mode button active-state sync
 
-var newImage = new Image();
-
-function updateImage() {
-    const img = document.getElementById("img");
-    const newImg = new Image();
-    newImg.onload = () => { img.src = newImg.src; };
-    newImg.onerror = () => { console.warn("Failed to load image."); };
-    // Cache-busting über Timestamp
-    newImg.src = "/api/screenshot.jpg?ts=" + Date.now();
-}
-
-function playpause()
-{
-	//  http://ataripi.fritz.box:8080/jsonrpc?Player.PlayPause
-	// [{"jsonrpc":"2.0","method":"Player.PlayPause","params":[1,"toggle"],"id":43}]
-}
-
+/**
+ * Convert hex color string to RGB object.
+ * @param {string} hex - e.g. "#ff00aa"
+ * @returns {{r:number,g:number,b:number}|null}
+ */
 function hexToRgb(hex) {
-	var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-	return result ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) } : null;
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : null;
 }
 
-$(function() {
-        setInterval(updateImage, 1000);
+// Element references
+const imgEl = document.getElementById("img");
+const brislider = document.getElementById("bri");
+const gammaSlider = document.getElementById("gamma");
+const gammalabel = document.getElementById("gammavalue");
+const brilabel = document.getElementById("brivalue");
+const lastUpdated = document.getElementById("lastUpdated");
+const updateStatus = document.getElementById("updateStatus");
+const themeToggle = document.getElementById("themeToggle");
+const themeText = document.getElementById("themeText");
+const themeIcon = document.getElementById("themeIcon");
+const displayToggle = document.getElementById("displayToggle");
+const tableToggle = document.getElementById("tableToggle");
+const displayState = document.getElementById("displayState");
+const tableState = document.getElementById("tableState");
 
-	$("#img").click(function(data) {
-                updateImage();
-        });
+// Apply stored or system theme preference
+let dark = (() => {
+  const stored = localStorage.getItem("ambi_theme");
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  return stored ? stored === "dark" : prefersDark;
+})();
 
-
-	$.get("/api/bri", function(data) {
-		$('#bri').val(parseInt(data));
-	});
-
-	$("#color").change(function(data) {
-		var col = hexToRgb(data.target.value);
-		$.get("/api/col/"+col.r+"/"+col.g+"/"+col.b, function(data) {
-		});
-	});
-	$("#ambilight").click(function(data) {
-		$.get("/api/mode/ambilight", function(data) { });
-	});
-	$("#rainbow").click(function(data) {
-		$.get("/api/mode/rainbow", function(data) { });
-	});
-	$("#vegas").click(function(data) {
-		$.get("/api/mode/vegas", function(data) { });
-	});
-	$("#knightrider").click(function(data) {
-		$.get("/api/mode/knightrider", function(data) { });
-	});
-	$("#testpattern").click(function(data) {
-		$.get("/api/mode/testpattern", function(data) { });
-	});
-	$("#white").click(function(data) {
-		$.get("/api/mode/white", function(data) { });
-	});
-	$("#off").click(function(data) {
-		$.get("/api/mode/off", function(data) { });
-	});
-	$("#bri0").click(function(data) {
-		$.get("/api/bri/0", function(data) { });
-		$('#bri').val(0);
-		$('#brivalue').text(0);
-	});
-	$("#bri25").click(function(data) {
-		$.get("/api/bri/25", function(data) { });
-		$('#bri').val(25);
-		$('#brivalue').text(25);
-	});
-	$("#bri50").click(function(data) {
-		$.get("/api/bri/50", function(data) { });
-		$('#bri').val(50);
-		$('#brivalue').text(50);
-	});
-	$("#bri75").click(function(data) {
-		$.get("/api/bri/75", function(data) { });
-		$('#bri').val(75);
-		$('#brivalue').text(75);
-	});
-	$("#bri100").click(function(data) {
-		$.get("/api/bri/100", function(data) { });
-		$('#bri').val(100);
-		$('#brivalue').text(100);
-	});
-	$("#bri").on("input change", function(data) {
-		$.get("/api/bri/"+$('#bri').val(), function(data) { });
-		$('#brivalue').text($('#bri').val());
-	});
-	$("#gamma").on("input change", function(data) {
-		$.get("/api/gamma/"+$('#gamma').val(), function(data) { });
-		$('#gammavalue').text($('#gamma').val());
-	});
-	$("#crop0").click(function(data) {
-		$.get("/api/crop/0", function(data) { });
-	});
-	$("#crop1").click(function(data) {
-		$.get("/api/crop/1", function(data) { });
-	});
+function applyTheme() {
+  if (dark) {
+    document.body.setAttribute("data-theme", "dark");
+    themeText.textContent = "Dark mode";
+    themeIcon.textContent = "🌙";
+  } else {
+    document.body.setAttribute("data-theme", "light");
+    themeText.textContent = "Light mode";
+    themeIcon.textContent = "☀️";
+  }
+}
+applyTheme();
+themeToggle.addEventListener("click", () => {
+  dark = !dark;
+  localStorage.setItem("ambi_theme", dark ? "dark" : "light");
+  applyTheme();
 });
+
+// Screenshot updating logic with throttling and visibility awareness
+let intervalHandle = null;
+let lastTimestamp = 0;
+function updateImage(force = false) {
+  if (!force && document.hidden) return; // conserve when tab not visible
+  const now = Date.now();
+  if (now - lastTimestamp < 900) return; // throttle ~1s
+  lastTimestamp = now;
+
+  const newImg = new Image();
+  updateStatus.textContent = "Updating...";
+  newImg.onload = () => {
+    imgEl.src = newImg.src;
+    const d = new Date();
+    lastUpdated.textContent = d.toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
+    });
+    updateStatus.textContent = "Live";
+    setTimeout(() => {
+      if (updateStatus.textContent === "Live") updateStatus.textContent = "";
+    }, 1500);
+  };
+  newImg.onerror = () => {
+    updateStatus.textContent = "Error";
+  };
+  newImg.src = "/api/screenshot.jpg?ts=" + now;
+}
+
+// Start periodic refresh (honoring visibility)
+function startAutoRefresh() {
+  if (intervalHandle) clearInterval(intervalHandle);
+  intervalHandle = setInterval(() => updateImage(), 1000);
+}
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) updateImage(true);
+});
+imgEl.addEventListener("click", () => updateImage(true));
+
+// Initialize brightness from backend
+fetch("/api/bri")
+  .then(r => r.text())
+  .then(text => {
+    const val = parseInt(text);
+    if (!isNaN(val)) {
+      brislider.value = val;
+      brilabel.textContent = val;
+    }
+  })
+  .catch(() => {});
+
+// Color picker handler
+document.getElementById("color").addEventListener("input", (e) => {
+  const col = hexToRgb(e.target.value);
+  if (col) {
+    fetch(`/api/col/${col.r}/${col.g}/${col.b}`).catch(() => {});
+  }
+});
+
+// Mode buttons and active-state handling
+const modeMap = {
+  ambilight: "ambilight",
+  rainbow: "rainbow",
+  vegas: "vegas",
+  knightrider: "knightrider",
+  testpattern: "testpattern",
+  white: "white",
+  off: "off"
+};
+
+function setActiveMode(modeName) {
+  const norm = modeName.toLowerCase();
+  Object.keys(modeMap).forEach(id => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    if (modeMap[id].toLowerCase() === norm) {
+      btn.classList.add("active");
+      btn.setAttribute("aria-pressed", "true");
+    } else {
+      btn.classList.remove("active");
+      btn.setAttribute("aria-pressed", "false");
+    }
+  });
+}
+
+// Wire clicks: update backend and UI
+Object.keys(modeMap).forEach(id => {
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    const modeName = modeMap[id];
+    fetch(`/api/mode/${modeName}`).catch(() => {});
+    setActiveMode(modeName);
+  });
+});
+
+// Poll backend every 5s for current mode to keep UI in sync.
+async function refreshCurrentMode() {
+  try {
+    const res = await fetch("/api/mode");
+    if (!res.ok) return;
+    const raw = await res.text();
+    const mode = raw.trim().toLowerCase();
+    if (mode) setActiveMode(mode);
+  } catch (e) {
+    // silent fail
+  }
+}
+setInterval(refreshCurrentMode, 5000);
+refreshCurrentMode(); // initial sync
+
+// Brightness preset buttons
+document.querySelectorAll("button[data-bri]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const v = btn.getAttribute("data-bri");
+    fetch(`/api/bri/${v}`).catch(() => {});
+    brislider.value = v;
+    brilabel.textContent = v;
+  });
+});
+
+// Debounced brightness slider
+let briTimeout = null;
+brislider.addEventListener("input", () => {
+  const v = brislider.value;
+  brilabel.textContent = v;
+  if (briTimeout) clearTimeout(briTimeout);
+  briTimeout = setTimeout(() => {
+    fetch(`/api/bri/${v}`).catch(() => {});
+  }, 150);
+});
+
+// Debounced gamma slider
+let gammaTimeout = null;
+gammaSlider.addEventListener("input", () => {
+  const v = gammaSlider.value;
+  gammalabel.textContent = v;
+  if (gammaTimeout) clearTimeout(gammaTimeout);
+  gammaTimeout = setTimeout(() => {
+    fetch(`/api/gamma/${v}`).catch(() => {});
+  }, 150);
+});
+
+// Display / Table state sync and toggles
+
+async function fetchDisplayState() {
+  try {
+    const res = await fetch("/api/display");
+    if (!res.ok) throw new Error("bad");
+    const raw = await res.text();
+    const val = raw.trim();
+    const on = val === "true";
+    displayToggle.checked = on;
+    displayState.textContent = on ? "On" : "Off";
+  } catch (e) {
+    displayState.textContent = "Error";
+  }
+}
+
+async function fetchTableState() {
+  try {
+    const res = await fetch("/api/table");
+    if (!res.ok) throw new Error("bad");
+    const raw = await res.text();
+    const val = raw.trim();
+    const on = val === "true";
+    tableToggle.checked = on;
+    tableState.textContent = on ? "On" : "Off";
+  } catch (e) {
+    tableState.textContent = "Error";
+  }
+}
+
+// Toggle handlers
+displayToggle.addEventListener("change", () => {
+  const target = displayToggle.checked ? "1" : "0";
+  fetch(`/api/display/${target}`)
+    .then(() => fetchDisplayState())
+    .catch(() => {
+      displayState.textContent = "Error";
+    });
+});
+tableToggle.addEventListener("change", () => {
+  const target = tableToggle.checked ? "1" : "0";
+  fetch(`/api/table/${target}`)
+    .then(() => fetchTableState())
+    .catch(() => {
+      tableState.textContent = "Error";
+    });
+});
+
+// Periodically resync display/table state in case something else changed them
+setInterval(() => {
+  fetchDisplayState();
+  fetchTableState();
+}, 5000);
+
+// Kick off auto-refresh and initial state sync
+startAutoRefresh();
+updateImage(true);
+fetchDisplayState();
+fetchTableState();

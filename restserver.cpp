@@ -14,6 +14,9 @@ RESTServer::RESTServer(AmbiPi* ambiPi) : _ambiPi(ambiPi)
 	Rest::Routes::Get(_router, "/api/display/:enabled",	Rest::Routes::bind(&RESTServer::setDisplay, this));
 	Rest::Routes::Get(_router, "/api/table/:enabled",	Rest::Routes::bind(&RESTServer::setGamingTable, this));
 
+	Rest::Routes::Get(_router, "/api/display",		Rest::Routes::bind(&RESTServer::getDisplay, this));
+	Rest::Routes::Get(_router, "/api/table",		Rest::Routes::bind(&RESTServer::getGamingTable, this));
+
 	Rest::Routes::Get(_router, "/api/alpha/:alpha",		Rest::Routes::bind(&RESTServer::setAlpha, this));
 	Rest::Routes::Get(_router, "/api/alpha",		Rest::Routes::bind(&RESTServer::getAlpha, this));
 
@@ -315,4 +318,16 @@ void RESTServer::setGamingTable(const Rest::Request &request, Http::ResponseWrit
 	std::string resp = enabled ? "true\n" : "false\n";
 	response.send(Http::Code::Ok, resp);
 	_ambiPi->setEnableGamingTable(enabled);
+}
+
+void RESTServer::getDisplay(const Rest::Request &request, Http::ResponseWriter response)
+{
+	std::string resp = _ambiPi->getEnableDisplayVideo() ? "true\n" : "false\n";
+	response.send(Http::Code::Ok, resp);
+}
+
+void RESTServer::getGamingTable(const Rest::Request &request, Http::ResponseWriter response)
+{
+	std::string resp = _ambiPi->getEnableGamingTable() ? "true\n" : "false\n";
+	response.send(Http::Code::Ok, resp);
 }

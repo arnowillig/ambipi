@@ -38,6 +38,8 @@ public:
 	void getStaticHTML(const Rest::Request& request, Http::ResponseWriter response);
 	void setDisplay(const Rest::Request &request, Http::ResponseWriter response);
 	void setGamingTable(const Rest::Request &request, Http::ResponseWriter response);
+	void getDisplay(const Rest::Request &request, Http::ResponseWriter response);
+	void getGamingTable(const Rest::Request &request, Http::ResponseWriter response);
 
 };
 

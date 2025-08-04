@@ -1,46 +1,137 @@
-<html>
-	<head>
-		<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
-		<script src="/static/ambipi.js"></script>
-		<link rel="stylesheet" type="text/css" href="/static/ambipi.css" />
-		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimal-ui" />
-	</head>
-	<body>
-		<h1>AtariPi</h1>
-		<hr />
-		<img id="img" src="/api/screenshot.jpg" alt="Screenshot" class="responsive" />
-		<hr />
-		<div>
-		<input type="color" id="color" name="color" value="#e66465" />
-		<label for="color">AmbiLight Color</label>
-		</div>
-		<div>
-			<input type="button" id="ambilight" value="AmbiLight" />
-			<input type="button" id="rainbow" value="Rainbow" />
-			<input type="button" id="vegas" value="Las Vegas" />
-			<input type="button" id="knightrider" value="Knightrider" />
-			<input type="button" id="testpattern" value="Test pattern" />
-			<input type="button" id="white"   value="Warm White" />
-			<input type="button" id="off"     value="Off" />
-		</div>
-		<div>
-			<input type="button" id="bri0"     value="Brightness 0%" />
-			<input type="button" id="bri25"    value="Brightness 25%" />
-			<input type="button" id="bri50"    value="Brightness 50%" />
-			<input type="button" id="bri75"    value="Brightness 75%" />
-			<input type="button" id="bri100"   value="Brightness 100%" />
-		</div>
-		<div class="slidecontainer">
-			<label for="bri">Brightness: <span id="brivalue" >100</span></label>
-			<input type="range" min="0" max="100" value="100" class="slider" name="bri" id="bri" />
-		</div>
-		<div class="slidecontainer">
-			<label for="gamma">Gamma: <span id="gammavalue">1.73</span></label>
-			<input type="range" min="0" max="10" value="1.73" class="slider" name="gamma" id="gamma" step="0.01" />
-		</div>
-		<ul>
-			<li><a href="http://garagecache.local:1880/">NodeRED</a></li>
-			<li><a href="http://ataripi.local:8080/">Kodi</a></li>
-		</ul>
-	</body>
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui" />
+  <title>AmbiPi</title>
+  <link rel="stylesheet" href="/static/ambipi.css" />
+</head>
+<body>
+  <div class="container" data-theme>
+    <header>
+      <h1>AmbiPi</h1>
+      <button class="theme-toggle" aria-label="Toggle theme" id="themeToggle">
+        <span id="themeIcon">🌙</span> <span id="themeText">Dark mode</span>
+      </button>
+    </header>
+
+    <div class="cards">
+      <!-- Screenshot card -->
+      <div class="card" aria-label="Live screenshot">
+        <div class="inline-label">
+          <div style="flex:1;">
+            <strong>Live Screenshot</strong>
+            <div class="small-text">Tap to refresh; updates automatically when visible.</div>
+          </div>
+          <div class="status" id="updateStatus">Updating...</div>
+        </div>
+        <div class="image-wrapper" style="margin-top:4px;">
+          <img id="img" src="/api/screenshot.jpg" alt="Screenshot" class="responsive" />
+        </div>
+        <div style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn secondary" id="refreshBtn" aria-label="Refresh screenshot">Refresh</button>
+          <div class="small-text" style="margin-left:auto;">Last updated: <span id="lastUpdated">—</span></div>
+        </div>
+      </div>
+
+      <!-- Color picker & mode card -->
+      <div class="card" aria-label="Ambilight controls">
+        <div>
+          <strong>AmbiLight & Modes</strong>
+          <div class="small-text">Set color or choose a preset lighting mode.</div>
+        </div>
+        <div class="color-input-wrapper">
+          <div>
+            <label for="color">Color</label><br />
+            <input type="color" id="color" name="color" value="#e66465" aria-label="AmbiLight color picker" />
+          </div>
+          <div style="flex:1; display:flex; gap:6px; flex-wrap:wrap;">
+            <button class="btn" id="ambilight">AmbiLight</button>
+            <button class="btn" id="rainbow">Rainbow</button>
+            <button class="btn" id="vegas">Las Vegas</button>
+            <button class="btn" id="knightrider">Knightrider</button>
+            <button class="btn" id="testpattern">Test Pattern</button>
+            <button class="btn" id="white">Warm White</button>
+            <button class="btn" id="off">Off</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Brightness & Gamma card -->
+      <div class="card" aria-label="Brightness and gamma controls">
+        <div>
+          <strong>Brightness & Gamma</strong>
+          <div class="small-text">Fine-tune intensity and gamma correction.</div>
+        </div>
+
+        <div class="slider-wrapper" aria-label="Brightness control">
+          <div class="inline-label">
+            <label for="bri">Brightness: <span id="brivalue">100</span>%</label>
+            <div style="margin-left:auto; display:flex; gap:4px; flex-wrap:wrap;">
+              <button class="btn secondary" data-bri="0">0%</button>
+              <button class="btn secondary" data-bri="25">25%</button>
+              <button class="btn secondary" data-bri="50">50%</button>
+              <button class="btn secondary" data-bri="75">75%</button>
+              <button class="btn secondary" data-bri="100">100%</button>
+            </div>
+          </div>
+          <input type="range" min="0" max="100" value="100" name="bri" id="bri" class="slider" aria-label="Brightness slider" />
+        </div>
+
+        <div class="slider-wrapper" aria-label="Gamma control">
+          <div class="inline-label">
+            <label for="gamma">Gamma: <span id="gammavalue">1.73</span></label>
+          </div>
+          <input type="range" min="0" max="10" value="1.73" step="0.01" name="gamma" id="gamma" class="slider" aria-label="Gamma slider" />
+        </div>
+      </div>
+    </div>
+
+      <!-- Display & Table toggles -->
+      <div class="card" aria-label="Display and Table toggles">
+        <div>
+          <strong>Display / Table</strong>
+          <div class="small-text">Toggle the display and table features on or off.</div>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-item">
+            <label class="switch">
+              <input type="checkbox" id="displayToggle" aria-label="Display on/off" />
+              <span class="slider-switch"></span>
+            </label>
+            <div style="margin-left:8px;">
+              <div><strong>Display</strong></div>
+              <div class="small-text" id="displayState">Loading…</div>
+            </div>
+          </div>
+          <div class="toggle-item">
+            <label class="switch">
+              <input type="checkbox" id="tableToggle" aria-label="Table on/off" />
+              <span class="slider-switch"></span>
+            </label>
+            <div style="margin-left:8px;">
+              <div><strong>Table</strong></div>
+              <div class="small-text" id="tableState">Loading…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- External links -->
+    <div class="card">
+      <div>
+        <strong>Quick Links</strong>
+        <div class="small-text">Jump to related services.</div>
+      </div>
+      <div class="links">
+        <a href="http://garagecache.local:1880/" target="_blank" rel="noopener">NodeRED</a>
+        <a href="http://ataripi.local:8080/" target="_blank" rel="noopener">Kodi</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/ambipi.js" defer></script>
+</body>
 </html>
