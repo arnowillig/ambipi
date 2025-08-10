@@ -1,49 +1,48 @@
-<!-- File: public/index.html
-     Responsive control UI with strict 2-column layout:
-     Rows: (5|1), (6|2), (7|3), (8|4)
-     IP/port hardcoded and not displayed. -->
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Gamewall Shelves</title>
-<style>
-  :root{--bg:#0f1117;--fg:#eaeefb;--muted:#9aa4b2;--card:#151824;--accent:#4f46e5;}
-  html,body{background:var(--bg);color:var(--fg);margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,"Noto Sans",sans-serif;}
-  header{padding:16px 20px;display:flex;gap:16px;align-items:center;background:#0b0d13;border-bottom:1px solid #1e2230;}
-  h1{font-size:18px;margin:0;letter-spacing:.3px;}
-  main{padding:20px;max-width:960px;margin:0 auto;display:grid;grid-template-columns:1fr;gap:20px;}
-  .card{background:var(--card);border:1px solid #1e2230;border-radius:16px;padding:16px;box-shadow:0 8px 30px rgba(0,0,0,.2);}
-  /* STRICT two-column grid: children flow as cells: 5,1,6,2,7,3,8,4 */
-  .rows{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
-  .shelf{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:12px;border-radius:14px;border:1px solid #23283b;background:#0d0f16;}
-  .shelf-title{font-weight:700;}
-  button{background:var(--accent);color:white;border:none;padding:10px 14px;border-radius:12px;cursor:pointer;font-weight:600;}
-  .row{display:flex;gap:12px;align-items:center;margin:6px 0;}
-  .small{font-size:12px;color:var(--muted);}
-  input[type="color"]{width:56px;height:38px;border:none;background:transparent;}
-  .status{margin-top:8px;min-height:22px;font-size:13px;color:#9ee493;}
-  .error{color:#ff6b6b;}
-  a{color:#8ab4ff;text-decoration:none;}
-  /* Mobile: stack to one column when very narrow */
-  @media (max-width: 460px){
-    .rows{grid-template-columns:1fr;}
-    header{flex-wrap:wrap;}
-  }
-</style>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Gamewall Shelves</title>
+  <style>
+    /* Minimal, mobile-safe, ALWAYS 2 columns */
+    :root{--bg:#0f1117;--fg:#eaeefb;--muted:#9aa4b2;--card:#151824;--accent:#4f46e5;}
+    html,body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,"Noto Sans",sans-serif;}
+    header{padding:16px 20px;display:flex;gap:16px;align-items:center;background:#0b0d13;border-bottom:1px solid #1e2230;}
+    h1{font-size:18px;margin:0;}
+    main{padding:20px;max-width:960px;margin:0 auto;display:grid;grid-template-columns:1fr;gap:20px;}
+    .card{background:var(--card);border:1px solid #1e2230;border-radius:16px;padding:16px;box-shadow:0 8px 30px rgba(0,0,0,.2);}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    input[type="color"]{width:56px;height:38px;border:none;background:transparent;}
+    button{background:var(--accent);color:white;border:none;padding:10px 14px;border-radius:12px;cursor:pointer;font-weight:600;}
+    .status{margin-top:8px;min-height:22px;font-size:13px;color:#9ee493;}
+    .error{color:#ff6b6b;}
+    a{color:#8ab4ff;text-decoration:none;margin-left:auto}
+
+    /* 🔒 Force exactly 2 columns at all widths */
+    .grid2{
+      display:grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr)) !important; /* force two columns */
+      gap:14px;
+    }
+
+    .shelf{
+      display:flex;align-items:center;justify-content:space-between;gap:12px;
+      padding:12px;border-radius:14px;border:1px solid #23283b;background:#0d0f16;
+    }
+    .shelf-title{font-weight:700;}
+  </style>
 </head>
 <body>
 <header>
   <h1>Gamewall Shelves</h1>
-  <div style="flex:1"></div>
-  <a href="/swagger.json" target="_blank">swagger.json</a>
+  <a href="/swagger.json" target="_blank" rel="noreferrer">swagger.json</a>
 </header>
 
 <main>
   <section class="card">
     <div class="row">
-      <label for="color" class="small">Color</label>
+      <label for="color" style="color:var(--muted);font-size:14px;">Color</label>
       <input id="color" type="color" value="#ff0000" aria-label="Color picker">
       <button id="all">Apply to All</button>
     </div>
@@ -53,8 +52,8 @@
   <section class="card">
     <h3 style="margin:4px 0 12px 0;">Select a shelf</h3>
 
-    <!-- EXACT ORDER AS REQUESTED: 5|1, 6|2, 7|3, 8|4 -->
-    <div class="rows">
+    <!-- EXACT order: 5|1, 6|2, 7|3, 8|4 (two columns, four rows) -->
+    <div class="grid2">
       <div class="shelf"><span class="shelf-title">Shelf 5</span><button data-shelf="5">Apply</button></div>
       <div class="shelf"><span class="shelf-title">Shelf 1</span><button data-shelf="1">Apply</button></div>
 
@@ -68,17 +67,17 @@
       <div class="shelf"><span class="shelf-title">Shelf 4</span><button data-shelf="4">Apply</button></div>
     </div>
 
-    <div class="small" style="margin-top:10px;">Order: 5 | 1 · 6 | 2 · 7 | 3 · 8 | 4</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:10px;">Order: 5 | 1 · 6 | 2 · 7 | 3 · 8 | 4 (always two columns)</div>
   </section>
 </main>
 
 <script>
-  // Hardcoded WLED device (hidden from UI)
+  // Hardcoded device (hidden)
   const HOST = "192.168.178.146";
   const PORT = "21324";
   const TIMEOUT_SECONDS = 2;
 
-  // Shelf LED ranges (from your shell scripts)
+  // Shelf LED ranges
   const SHELF_RANGES = {
     1: [ { startIndex:   0, count: 13 }, { startIndex:  97, count: 20 } ],
     2: [ { startIndex:  13, count: 13 }, { startIndex:  84, count: 13 } ],
@@ -91,8 +90,7 @@
   };
 
   const statusEl = document.getElementById('status');
-
-  function selectedColor(){ return document.getElementById('color').value.trim(); }
+  const pickColor = () => document.getElementById('color').value.trim();
 
   async function applyRanges(ranges, color) {
     statusEl.classList.remove('error');
@@ -121,7 +119,6 @@
     }
   }
 
-  // Attach handlers for each shelf button
   document.querySelectorAll('button[data-shelf]').forEach(btn => {
     btn.addEventListener('click', () => {
       const shelfNo = parseInt(btn.dataset.shelf, 10);
@@ -131,13 +128,12 @@
         statusEl.textContent = 'Unknown shelf.';
         return;
       }
-      applyRanges(ranges, selectedColor());
+      applyRanges(ranges, pickColor());
     });
   });
 
-  // Apply to all shelves
   document.getElementById('all').addEventListener('click', () => {
-    const color = selectedColor();
+    const color = pickColor();
     const all = [];
     Object.values(SHELF_RANGES).forEach(arr => arr.forEach(r => all.push(r)));
     applyRanges(all, color);
