@@ -72,5 +72,32 @@
         }
       }
     }
-  }
+  },
+  "/api/v1/wled/shelf-color": {
+      "post": {
+        "summary": "Set a configured shelf to a solid color (server reads shelves.json)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["shelf", "color"],
+                "properties": {
+                  "shelf": { "type": "integer", "minimum": 1, "maximum": 999, "example": 5 },
+                  "color": { "type": "string", "example": "#00ff00" },
+                  "timeoutSeconds": { "type": "integer", "minimum": 0, "maximum": 255, "example": 2 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Applied" },
+          "400": { "description": "Bad request" },
+          "404": { "description": "Unknown shelf" },
+          "500": { "description": "Internal error" }
+        }
+      }
+    }
 }

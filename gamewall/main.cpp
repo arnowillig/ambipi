@@ -1,20 +1,16 @@
 // File: main.cpp
-// Build: your existing CMakeLists.txt works.
-// Run:   ./wled_rest --port 9080 --threads 2
+// Adds POST /api/v1/wled/shelf-color which reads shelf ranges, host, port from shelves.json.
+// shelves.json search order:
+//   1) environment SHELVES_JSON absolute path, if set
+//   2) PUBLIC_DIR/shelves.json (PUBLIC_DIR defaults to "public")
+//   3) ./public/shelves.json
 //
-// What this does:
-// - Keeps the two API endpoints:
-//     POST /api/v1/wled/dnrgb-range
-//     POST /api/v1/wled/ranges-color
-// - Adds CORS (simple + preflight).
-// - Uses REUSE_ADDR on the HTTP server.
-// - Serves static files from disk (no embedded strings):
-//     GET /            => ./public/index.html
-//     GET /swagger.json => ./public/swagger.json
+// Request body:
+//   { "shelf": 5, "color": "#00ff00", "timeoutSeconds": 2 }  // timeoutSeconds optional
 //
-// Notes:
-// - All comments and logs are in English.
-// - Adjust PUBLIC_DIR via environment variable if needed.
+// Response:
+//   200: { "ok": true, "applied": 1, "shelf": 5 }
+//   400/404/500 on errors with {"ok":false,"error":"..."}
 
 #include <pistache/endpoint.h>
 #include <pistache/router.h>
@@ -34,8 +30,9 @@
 #include <cctype>
 #include <cstdlib>
 #include <unordered_map>
+#include <sys/stat.h>
 
-// ---- UDP sender (original function, logs in English) ----
+// ---- UDP sender (unchanged, logs in English) ----
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -56,7 +53,6 @@ bool sendWledDnRgbRange(const char* host, const char* port, uint16_t startIndex,
         return true;
     }
 
-    // Safe UDP payload size; chunk when necessary
     const size_t max_payload = 512; // conservative
     size_t needed = 1 + 1 + 2 + 3 * ledCount; // mode + timeout + start hi/lo + RGBs
     if (needed > max_payload) {
@@ -127,7 +123,7 @@ namespace {
 std::atomic<bool> g_running{true};
 void handleSignal(int) { g_running = false; }
 
-// --- Helpers: color parsing ---
+// --- helpers: color parsing ---
 static inline bool parseHexByte(char hi, char lo, uint8_t& out) {
     auto hex = [](char c)->int {
         if (c >= '0' && c <= '9') return c - '0';
@@ -150,48 +146,126 @@ static bool parseHexColor(const std::string& s, uint8_t& r, uint8_t& g, uint8_t&
            parseHexByte(v[4], v[5], b);
 }
 
-// --- Small static file loader ---
+// --- tiny file/mime helpers ---
 static std::string readFile(const std::string& path, bool* ok) {
     std::ifstream ifs(path, std::ios::binary);
-    if (!ifs) { if (ok) *ok = false; return {}; }
+    if (!ifs) {
+        if (ok) *ok = false;
+        return {};
+    }
     std::ostringstream oss;
     oss << ifs.rdbuf();
-    if (ok) *ok = true;
+    if (ok) {
+        *ok = true;
+    }
     return oss.str();
 }
+static time_t fileMtime(const std::string& path) {
+    struct stat st{};
+    if (stat(path.c_str(), &st) == 0) return st.st_mtime;
+    return 0;
+}
 static std::string guessMime(const std::string& path) {
-    static const std::unordered_map<std::string, std::string> m = {
-        {".html","text/html"}, {".htm","text/html"}, {".json","application/json"},
-        {".js","application/javascript"}, {".css","text/css"},
-        {".svg","image/svg+xml"}, {".png","image/png"}, {".jpg","image/jpeg"},
-        {".jpeg","image/jpeg"}, {".ico","image/x-icon"}, {".txt","text/plain"}
-    };
     auto dot = path.find_last_of('.');
     if (dot == std::string::npos) return "application/octet-stream";
-    auto it = m.find(path.substr(dot));
-    return (it != m.end()) ? it->second : "application/octet-stream";
+    const auto ext = path.substr(dot);
+    if (ext == ".html" || ext == ".htm") return "text/html";
+    if (ext == ".json") return "application/json";
+    if (ext == ".js")   return "application/javascript";
+    if (ext == ".css")  return "text/css";
+    return "application/octet-stream";
 }
 
+// --- shelves.json loader/cacher ---
+struct ShelfRange { uint32_t startIndex; uint32_t count; };
+struct ShelvesConfig {
+    std::string host = "192.168.178.146";
+    std::string port = "21324";
+    std::unordered_map<int, std::vector<ShelfRange>> shelves;
+};
+
+class ShelvesStore {
+public:
+    explicit ShelvesStore(std::string publicDir)
+        : publicDir_(std::move(publicDir)) {
+        const char* env = std::getenv("SHELVES_JSON");
+        if (env && *env) path_ = env;
+        else path_ = publicDir_.empty() ? "public/shelves.json" : (publicDir_ + "/shelves.json");
+    }
+
+    // Load or reload if file changed; returns false on parse error or missing file
+    bool ensureLoaded(ShelvesConfig& outCfg, std::string& err) {
+        const time_t mt = fileMtime(path_);
+        if (mt == 0) { err = "shelves.json not found at: " + path_; return false; }
+        if (mt != lastMtime_ || !loaded_) {
+            bool ok; const std::string txt = readFile(path_, &ok);
+            if (!ok) { err = "Failed to read shelves.json"; return false; }
+            try {
+                json j = json::parse(txt);
+                ShelvesConfig cfg;
+                if (j.contains("host") && j["host"].is_string()) cfg.host = j["host"].get<std::string>();
+                if (j.contains("port") && j["port"].is_string()) cfg.port = j["port"].get<std::string>();
+                if (!j.contains("shelves") || !j["shelves"].is_object()) {
+                    err = "Missing 'shelves' object in shelves.json"; return false;
+                }
+                cfg.shelves.clear();
+                for (auto it = j["shelves"].begin(); it != j["shelves"].end(); ++it) {
+                    int shelfIdx = std::stoi(it.key());
+                    if (!it.value().is_array()) continue;
+                    std::vector<ShelfRange> ranges;
+                    for (const auto& r : it.value()) {
+                        if (!r.is_object()) continue;
+                        if (!r.contains("startIndex") || !r.contains("count")) continue;
+                        uint32_t si = r["startIndex"].get<uint32_t>();
+                        uint32_t ct = r["count"].get<uint32_t>();
+                        ranges.push_back({si, ct});
+                    }
+                    cfg.shelves[shelfIdx] = std::move(ranges);
+                }
+                cache_ = std::move(cfg);
+                lastMtime_ = mt;
+                loaded_ = true;
+                std::cerr << "[INFO] shelves.json reloaded from " << path_ << "\n";
+            } catch (const std::exception& e) {
+                err = std::string("Invalid shelves.json: ") + e.what();
+                return false;
+            }
+        }
+        outCfg = cache_;
+        return true;
+    }
+
+    const std::string& path() const { return path_; }
+
+private:
+    std::string publicDir_;
+    std::string path_;
+    time_t lastMtime_{0};
+    bool loaded_{false};
+    ShelvesConfig cache_;
+};
+
+// --- server class ---
 struct WledApiServer {
     explicit WledApiServer(Address addr, int threads)
         : httpEndpoint_(std::make_shared<Http::Endpoint>(addr)), threads_(threads) {
 
         const char* env = std::getenv("PUBLIC_DIR");
         publicDir_ = env ? std::string(env) : std::string("public");
+        shelvesStore_ = std::make_shared<ShelvesStore>(publicDir_);
     }
 
     void init() {
-        // Ensure REUSE_ADDR is set
         auto opts = Http::Endpoint::options()
                         .threads(static_cast<unsigned int>(std::max(1, threads_)))
-                        .flags(Tcp::Options::ReuseAddr);
+                        .flags(Tcp::Options::ReuseAddr); // REUSE_ADDR
         httpEndpoint_->init(opts);
         setupRoutes();
     }
-
     void start() {
         httpEndpoint_->setHandler(router_.handler());
         httpEndpoint_->serveThreaded();
+        std::cerr << "[INFO] HTTP server started.\n";
     }
     void shutdown() { httpEndpoint_->shutdown(); }
 
@@ -209,11 +283,6 @@ private:
         resp.headers().add<Http::Header::ContentType>(MIME(Application, Json));
         resp.send(code, j.dump());
     }
-    static void sendHtml(Http::ResponseWriter& resp, const std::string& body, Http::Code code = Http::Code::Ok) {
-        addCors(resp);
-        resp.headers().add<Http::Header::ContentType>(MIME(Text, Html));
-        resp.send(code, body);
-    }
     static void sendRaw(Http::ResponseWriter& resp, const std::string& body, const std::string& mime, Http::Code code = Http::Code::Ok) {
         addCors(resp);
         resp.headers().add<Http::Header::ContentType>(Http::Mime::MediaType(mime));
@@ -223,27 +292,28 @@ private:
     void setupRoutes() {
         using namespace Rest;
 
-        // REST endpoints
+        // Existing endpoints
         Routes::Post(router_, "/api/v1/wled/dnrgb-range",
                      Routes::bind(&WledApiServer::postDnRgbRange, this));
         Routes::Post(router_, "/api/v1/wled/ranges-color",
                      Routes::bind(&WledApiServer::postRangesColor, this));
 
-        // CORS preflight
-        Routes::Options(router_, "/api/v1/wled/dnrgb-range",
-                        Routes::bind(&WledApiServer::optionsAny, this));
-        Routes::Options(router_, "/api/v1/wled/ranges-color",
-                        Routes::bind(&WledApiServer::optionsAny, this));
+        // New shelf API: body only needs shelf + color (+ optional timeoutSeconds)
+        Routes::Post(router_, "/api/v1/wled/shelf-color",
+                     Routes::bind(&WledApiServer::postShelfColor, this));
 
-        // Static files from disk
+        // Static: swagger.json + index.html
         Routes::Get(router_, "/",                    Routes::bind(&WledApiServer::getIndex, this));
         Routes::Get(router_, "/swagger.json",        Routes::bind(&WledApiServer::getSwagger, this));
-
-        // Optional: serve additional assets under /public (e.g., /public/app.js, /public/app.css)
         Routes::Get(router_, "/public/:file",        Routes::bind(&WledApiServer::getPublicFile, this));
-        Routes::Options(router_, "/",                Routes::bind(&WledApiServer::optionsAny, this));
-        Routes::Options(router_, "/swagger.json",    Routes::bind(&WledApiServer::optionsAny, this));
-        Routes::Options(router_, "/public/:file",    Routes::bind(&WledApiServer::optionsAny, this));
+
+        // OPTIONS for CORS
+        Routes::Options(router_, "/api/v1/wled/dnrgb-range",  Routes::bind(&WledApiServer::optionsAny, this));
+        Routes::Options(router_, "/api/v1/wled/ranges-color", Routes::bind(&WledApiServer::optionsAny, this));
+        Routes::Options(router_, "/api/v1/wled/shelf-color",  Routes::bind(&WledApiServer::optionsAny, this));
+        Routes::Options(router_, "/",                          Routes::bind(&WledApiServer::optionsAny, this));
+        Routes::Options(router_, "/swagger.json",              Routes::bind(&WledApiServer::optionsAny, this));
+        Routes::Options(router_, "/public/:file",              Routes::bind(&WledApiServer::optionsAny, this));
     }
 
     // --- Static handlers ---
@@ -253,14 +323,12 @@ private:
         if (!ok) return sendRaw(resp, "index.html not found", "text/plain", Http::Code::Not_Found);
         return sendRaw(resp, data, guessMime(path), Http::Code::Ok);
     }
-
     void getSwagger(const Rest::Request&, Http::ResponseWriter resp) {
         const std::string path = publicDir_ + "/swagger.json";
         bool ok=false; auto data = readFile(path, &ok);
         if (!ok) return sendRaw(resp, "swagger.json not found", "text/plain", Http::Code::Not_Found);
         return sendRaw(resp, data, guessMime(path), Http::Code::Ok);
     }
-
     void getPublicFile(const Rest::Request& req, Http::ResponseWriter resp) {
         const auto fname = req.param(":file").as<std::string>();
         const std::string path = publicDir_ + "/" + fname;
@@ -268,19 +336,17 @@ private:
         if (!ok) return sendRaw(resp, "file not found", "text/plain", Http::Code::Not_Found);
         return sendRaw(resp, data, guessMime(path), Http::Code::Ok);
     }
-
     void optionsAny(const Rest::Request&, Http::ResponseWriter resp) {
         addCors(resp);
         resp.send(Http::Code::No_Content);
     }
 
-    // --- POST /api/v1/wled/dnrgb-range ---
+    // --- POST /api/v1/wled/dnrgb-range (unchanged) ---
     void postDnRgbRange(const Rest::Request& req, Http::ResponseWriter resp) {
         json body;
         try { body = json::parse(req.body()); }
         catch (const std::exception& e) {
-            return sendJson(resp, Http::Code::Bad_Request,
-                            {{"ok", false}, {"error", std::string("Invalid JSON: ") + e.what()}});
+            return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", std::string("Invalid JSON: ") + e.what()}});
         }
 
         std::string host, port;
@@ -288,40 +354,33 @@ private:
         uint8_t timeoutSeconds = 1;
         std::vector<uint8_t> rgb;
 
-        if (auto it = body.find("host"); it != body.end() && it->is_string()) host = *it;
-        else return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "Field 'host' (string) is required"}});
-
-        if (auto it = body.find("port"); it != body.end() && it->is_string()) port = *it;
-        else return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "Field 'port' (string) is required"}});
-
+        if (auto it = body.find("host"); it != body.end() && it->is_string()) host = *it; else
+            return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "Field 'host' (string) is required"}});
+        if (auto it = body.find("port"); it != body.end() && it->is_string()) port = *it; else
+            return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "Field 'port' (string) is required"}});
         if (auto it = body.find("startIndex"); it != body.end() && (it->is_number_unsigned() || it->is_number_integer())) {
             startIndex32 = it->get<uint32_t>();
             if (startIndex32 > 0xFFFF)
-                return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "startIndex must be in [0, 65535]"}});
+                return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "startIndex must be in [0,65535]"}});
         } else {
             return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "Field 'startIndex' (uint16) is required"}});
         }
-
         if (auto it = body.find("timeoutSeconds"); it != body.end()) {
             if (!(it->is_number_unsigned() || it->is_number_integer()))
-                return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "timeoutSeconds must be an integer [0..255]"}})
-            ;
+                return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "timeoutSeconds must be an integer [0..255]"}});
             uint32_t ts = it->get<uint32_t>();
             if (ts > 255)
-                return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "timeoutSeconds must be in [0, 255]"}});
+                return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "timeoutSeconds must be in [0,255]"}});
             timeoutSeconds = static_cast<uint8_t>(ts);
         }
-
         if (auto it = body.find("rgb"); it != body.end() && it->is_array()) {
             rgb.reserve(it->size());
             for (const auto& v : *it) {
                 if (!(v.is_number_unsigned() || v.is_number_integer()))
                     return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "All 'rgb' values must be integers [0..255]"}});
-
                 int val = v.get<int>();
                 if (val < 0 || val > 255)
                     return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "All 'rgb' values must be in [0..255]"}});
-
                 rgb.push_back(static_cast<uint8_t>(val));
             }
         } else {
@@ -336,42 +395,33 @@ private:
         bool ok = sendWledDnRgbRange(host.c_str(), port.c_str(),
                                      static_cast<uint16_t>(startIndex32),
                                      rgb, timeoutSeconds);
-
         if (!ok)
             return sendJson(resp, Http::Code::Internal_Server_Error, {{"ok", false}, {"error", "Sending failed. See server logs for details."}});
-
         return sendJson(resp, Http::Code::Ok, {{"ok", true}});
     }
 
-    // --- POST /api/v1/wled/ranges-color ---
+    // --- POST /api/v1/wled/ranges-color (unchanged) ---
     void postRangesColor(const Rest::Request& req, Http::ResponseWriter resp) {
         json body;
         try { body = json::parse(req.body()); }
         catch (const std::exception& e) {
-            return sendJson(resp, Http::Code::Bad_Request,
-                            {{"ok", false}, {"error", std::string("Invalid JSON: ") + e.what()}});
+            return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", std::string("Invalid JSON: ") + e.what()}});
         }
 
         std::string host, port;
         uint8_t timeoutSeconds = 1;
-
-        if (auto it = body.find("host"); it != body.end() && it->is_string()) host = *it;
-        else return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "Field 'host' (string) is required"}});
-
-        if (auto it = body.find("port"); it != body.end() && it->is_string()) port = *it;
-        else return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "Field 'port' (string) is required"}});
-
+        if (auto it = body.find("host"); it != body.end() && it->is_string()) host = *it; else
+            return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "Field 'host' (string) is required"}});
+        if (auto it = body.find("port"); it != body.end() && it->is_string()) port = *it; else
+            return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "Field 'port' (string) is required"}});
         if (auto it = body.find("timeoutSeconds"); it != body.end()) {
             if (!(it->is_number_unsigned() || it->is_number_integer()))
                 return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "timeoutSeconds must be an integer [0..255]"}});
-
             uint32_t ts = it->get<uint32_t>();
             if (ts > 255)
                 return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "timeoutSeconds must be in [0,255]"}});
-
             timeoutSeconds = static_cast<uint8_t>(ts);
         }
-
         if (!body.contains("ranges") || !body["ranges"].is_array() || body["ranges"].empty())
             return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "Field 'ranges' (non-empty array) is required"}});
 
@@ -379,57 +429,28 @@ private:
         uint32_t applied = 0;
 
         for (const auto& rj : body["ranges"]) {
-            if (!rj.is_object()) {
-                failed.push_back({{"reason","Invalid range object"}});
-                continue;
+            if (!rj.is_object()) { failed.push_back({{"reason","Invalid range object"}}); continue; }
+            if (!rj.contains("startIndex") || !rj.contains("count") || !rj.contains("color")) {
+                failed.push_back({{"range", rj}, {"reason","Missing startIndex/count/color"}}); continue;
             }
-
-            if (!rj.contains("startIndex") || !(rj["startIndex"].is_number_unsigned() || rj["startIndex"].is_number_integer())) {
-                failed.push_back({{"range", rj}, {"reason","'startIndex' missing/invalid"}});
-                continue;
-            }
-            if (!rj.contains("count") || !(rj["count"].is_number_unsigned() || rj["count"].is_number_integer())) {
-                failed.push_back({{"range", rj}, {"reason","'count' missing/invalid"}});
-                continue;
-            }
-            if (!rj.contains("color") || !rj["color"].is_string()) {
-                failed.push_back({{"range", rj}, {"reason","'color' missing/invalid"}});
-                continue;
-            }
-
             uint32_t startIndex32 = rj["startIndex"].get<uint32_t>();
             uint32_t count32      = rj["count"].get<uint32_t>();
-            if (startIndex32 > 0xFFFF) { failed.push_back({{"range", rj}, {"reason","startIndex out of range [0..65535]"}}); continue; }
-            if (count32 == 0)          { failed.push_back({{"range", rj}, {"reason","count must be > 0"}}); continue; }
-            if (startIndex32 + count32 - 1 > 0xFFFF) {
-                failed.push_back({{"range", rj}, {"reason","startIndex+count-1 exceeds 65535"}});
-                continue;
+            if (count32 == 0 || startIndex32 > 0xFFFF || startIndex32 + count32 - 1 > 0xFFFF) {
+                failed.push_back({{"range", rj}, {"reason","startIndex/count out of range"}}); continue;
             }
-
             uint8_t rr=0, gg=0, bb=0;
             const std::string color = rj["color"].get<std::string>();
             if (!parseHexColor(color, rr, gg, bb)) {
-                failed.push_back({{"range", rj}, {"reason","color must be RRGGBB (accepts #RRGGBB or 0xRRGGBB)"}});
-                continue;
+                failed.push_back({{"range", rj}, {"reason","color must be RRGGBB / #RRGGBB / 0xRRGGBB"}}); continue;
             }
 
-            // Build contiguous RGB block filled with the color and send
             std::vector<uint8_t> payload;
             payload.reserve(count32 * 3);
-            for (uint32_t i = 0; i < count32; ++i) {
-                payload.push_back(rr);
-                payload.push_back(gg);
-                payload.push_back(bb);
-            }
-
+            for (uint32_t i = 0; i < count32; ++i) { payload.push_back(rr); payload.push_back(gg); payload.push_back(bb); }
             bool ok = sendWledDnRgbRange(host.c_str(), port.c_str(),
-                                         static_cast<uint16_t>(startIndex32),
-                                         payload, timeoutSeconds);
-            if (!ok) {
-                failed.push_back({{"range", rj}, {"reason","UDP send failed (see server logs)"}});
-            } else {
-                ++applied;
-            }
+                                         static_cast<uint16_t>(startIndex32), payload, timeoutSeconds);
+            if (!ok) failed.push_back({{"range", rj}, {"reason","UDP send failed (see server logs)"}});
+            else ++applied;
         }
 
         if (!failed.empty()) {
@@ -438,14 +459,79 @@ private:
                                      : Http::Code::Partial_Content,
                             {{"ok", false}, {"applied", applied}, {"failed", failed}});
         }
-
         return sendJson(resp, Http::Code::Ok, {{"ok", true}, {"applied", applied}});
+    }
+
+    // --- NEW: POST /api/v1/wled/shelf-color ---
+    void postShelfColor(const Rest::Request& req, Http::ResponseWriter resp) {
+        json body;
+        try { body = json::parse(req.body()); }
+        catch (const std::exception& e) {
+            return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", std::string("Invalid JSON: ") + e.what()}});
+        }
+
+        if (!body.contains("shelf") || !(body["shelf"].is_number_integer() || body["shelf"].is_number_unsigned()))
+            return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "Field 'shelf' (int) is required"}});
+
+        if (!body.contains("color") || !body["color"].is_string())
+            return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "Field 'color' (string) is required"}});
+
+        uint8_t rr=0, gg=0, bb=0;
+        const std::string color = body["color"].get<std::string>();
+        if (!parseHexColor(color, rr, gg, bb))
+            return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "color must be RRGGBB / #RRGGBB / 0xRRGGBB"}});
+
+        uint8_t timeoutSeconds = 2;
+        if (auto it = body.find("timeoutSeconds"); it != body.end()) {
+            if (!(it->is_number_unsigned() || it->is_number_integer()))
+                return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "timeoutSeconds must be integer [0..255]"}});
+
+            uint32_t ts = it->get<uint32_t>();
+            if (ts > 255) return sendJson(resp, Http::Code::Bad_Request, {{"ok", false}, {"error", "timeoutSeconds must be in [0,255]"}});
+
+            timeoutSeconds = static_cast<uint8_t>(ts);
+        }
+
+        // Load shelves.json
+        ShelvesConfig cfg;
+        std::string err;
+        if (!shelvesStore_->ensureLoaded(cfg, err)) {
+            return sendJson(resp, Http::Code::Internal_Server_Error, {{"ok", false}, {"error", err}});
+        }
+
+        const int shelfIdx = body["shelf"].get<int>();
+        auto it = cfg.shelves.find(shelfIdx);
+        if (it == cfg.shelves.end() || it->second.empty()) {
+            return sendJson(resp, Http::Code::Not_Found,
+                            {{"ok", false}, {"error", "Unknown shelf or no ranges in config"}, {"shelf", shelfIdx}});
+        }
+
+        // For each configured range, send a solid color block
+        uint32_t applied = 0;
+        for (const auto& r : it->second) {
+            if (r.count == 0 || r.startIndex > 0xFFFF || r.startIndex + r.count - 1 > 0xFFFF) continue;
+
+            std::vector<uint8_t> payload;
+            payload.reserve(static_cast<size_t>(r.count) * 3);
+            for (uint32_t i = 0; i < r.count; ++i) { payload.push_back(rr); payload.push_back(gg); payload.push_back(bb); }
+
+            bool ok = sendWledDnRgbRange(cfg.host.c_str(), cfg.port.c_str(),
+                                         static_cast<uint16_t>(r.startIndex), payload, timeoutSeconds);
+            if (ok) ++applied;
+        }
+
+        if (applied == 0)
+            return sendJson(resp, Http::Code::Internal_Server_Error,
+                            {{"ok", false}, {"error", "No range could be applied (see server logs)"}, {"shelf", shelfIdx}});
+
+        return sendJson(resp, Http::Code::Ok, {{"ok", true}, {"applied", applied}, {"shelf", shelfIdx}});
     }
 
     std::shared_ptr<Http::Endpoint> httpEndpoint_;
     Rest::Router router_;
     int threads_;
     std::string publicDir_;
+    std::shared_ptr<ShelvesStore> shelvesStore_;
 };
 } // namespace
 

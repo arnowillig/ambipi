@@ -70,74 +70,87 @@
     <div style="font-size:12px;color:var(--muted);margin-top:10px;">Order: 5 | 1 · 6 | 2 · 7 | 3 · 8 | 4 (always two columns)</div>
   </section>
 </main>
-
 <script>
-  // Hardcoded device (hidden)
-  const HOST = "192.168.178.146";
-  const PORT = "21324";
-  const TIMEOUT_SECONDS = 2;
+// UI bits
+const statusEl = document.getElementById('status');
+const pickColor = () => document.getElementById('color').value.trim();
 
-  // Shelf LED ranges
-  const SHELF_RANGES = {
-    1: [ { startIndex:   0, count: 13 }, { startIndex:  97, count: 20 } ],
-    2: [ { startIndex:  13, count: 13 }, { startIndex:  84, count: 13 } ],
-    3: [ { startIndex:  26, count: 13 }, { startIndex:  71, count: 13 } ],
-    4: [ { startIndex:  39, count: 32 } ],
-    5: [ { startIndex: 117, count: 13 }, { startIndex: 214, count: 20 } ],
-    6: [ { startIndex: 130, count: 13 }, { startIndex: 201, count: 13 } ],
-    7: [ { startIndex: 143, count: 13 }, { startIndex: 188, count: 13 } ],
-    8: [ { startIndex: 156, count: 32 } ],
-  };
+// Small helper for pacing UDP sends
+const sleep = (ms) => new Promise(res => setTimeout(res, ms));
 
-  const statusEl = document.getElementById('status');
-  const pickColor = () => document.getElementById('color').value.trim();
+/**
+ * POST /api/v1/wled/shelf-color
+ * Returns true on success, false on failure (no throw).
+ */
+async function applyShelf(shelfIndex, color) {
+  try {
+    const res = await fetch('/api/v1/wled/shelf-color', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shelf: shelfIndex, color })
+    });
+    const data = await res.json().catch(() => ({}));
+    return res.ok && data && data.ok !== false;
+  } catch {
+    return false;
+  }
+}
 
-  async function applyRanges(ranges, color) {
-    statusEl.classList.remove('error');
-    statusEl.textContent = 'Sending...';
-    try {
-      const res = await fetch('/api/v1/wled/ranges-color', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          host: HOST,
-          port: PORT,
-          timeoutSeconds: TIMEOUT_SECONDS,
-          ranges: ranges.map(r => ({ ...r, color }))
-        })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.ok === false) {
-        statusEl.classList.add('error');
-        statusEl.textContent = 'Error: ' + (data.error || res.status + ' ' + res.statusText);
-      } else {
-        statusEl.textContent = 'Applied.';
-      }
-    } catch (e) {
-      statusEl.classList.add('error');
-      statusEl.textContent = 'Network error: ' + e;
+/**
+ * Apply color to shelves SEQUENTIALLY with a small delay + one retry.
+ * This avoids packet loss that can happen when blasting many UDP updates in parallel.
+ */
+async function applyShelvesSequential(shelves, color) {
+  statusEl.classList.remove('error');
+  statusEl.textContent = 'Sending...';
+
+  let okCount = 0;
+  const failed = [];
+
+  for (const shelf of shelves) {
+    // First attempt
+    let ok = await applyShelf(shelf, color);
+
+    // Optional: one quick retry if it failed
+    if (!ok) {
+      await sleep(60); // brief pause before retry
+      ok = await applyShelf(shelf, color);
+    }
+
+    if (ok) {
+      okCount++;
+      // Gentle pacing between shelves so UDP packets don't bunch up
+      await sleep(50);
+    } else {
+      failed.push(shelf);
+      // Slight pause before moving on so we don't hammer the device
+      await sleep(40);
     }
   }
 
-  document.querySelectorAll('button[data-shelf]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const shelfNo = parseInt(btn.dataset.shelf, 10);
-      const ranges = SHELF_RANGES[shelfNo] || [];
-      if (!ranges.length) {
-        statusEl.classList.add('error');
-        statusEl.textContent = 'Unknown shelf.';
-        return;
-      }
-      applyRanges(ranges, pickColor());
-    });
-  });
+  if (failed.length) {
+    statusEl.classList.add('error');
+    statusEl.textContent = `Partial: ${okCount} applied, failed: ${failed.join(', ')}`;
+  } else {
+    statusEl.textContent = `Applied to ${okCount} shelves.`;
+  }
+}
 
-  document.getElementById('all').addEventListener('click', () => {
-    const color = pickColor();
-    const all = [];
-    Object.values(SHELF_RANGES).forEach(arr => arr.forEach(r => all.push(r)));
-    applyRanges(all, color);
+// Hook up per-shelf buttons (single-shot)
+document.querySelectorAll('button[data-shelf]').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const shelfNo = parseInt(btn.dataset.shelf, 10);
+    await applyShelvesSequential([shelfNo], pickColor());
   });
+});
+
+// "Apply to All": run in the exact cupboard order, sequentially
+document.getElementById('all').addEventListener('click', async () => {
+  const color = pickColor();
+  // Order: 5 | 1, 6 | 2, 7 | 3, 8 | 4
+  const order = [5, 1, 6, 2, 7, 3, 8, 4];
+  await applyShelvesSequential(order, color);
+});
 </script>
 </body>
 </html>
