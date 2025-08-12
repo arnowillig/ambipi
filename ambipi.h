@@ -86,6 +86,7 @@ public:
 	void drawGUI(cv::Mat frame);
 #endif
 	cv::Mat cropBorders(cv::Mat frame, bool debug) const;
+	void calculateGameWallFrameFromFrame(cv::Mat frame);
 	void calculateDisplayFrameFromFrame(cv::Mat frame);
 	void calculateAmbilightFromFrame(cv::Mat frame, bool bgr=false);
 	void clear();
@@ -119,6 +120,7 @@ private:
 	void unpackRgb(uint32_t packed, uint8_t &r, uint8_t &g, uint8_t &b);
 	bool sendKDPDatagram(const uint8_t *data, size_t size);
 	bool sendFullFrame(cv::Mat frame);
+	void sendFrameToGameWall(const cv::Mat& resized6x4BGR);
 };
 
 #endif // AMBIPI_H

@@ -31,6 +31,48 @@
 #define DISPLAY_PORT 14000
 #define DISPLAY_PRIO 0x82
 
+
+
+static const char* DDP_HOST = "192.168.178.146";
+static const uint16_t DDP_PORT = 4048;
+static constexpr uint8_t DDP_FLAG_VERSION1  = 0x40; // version=1 (bits 6..7)
+static constexpr uint8_t DDP_FLAG_PUSH      = 0x01; // push frame immediately
+static constexpr uint8_t DDP_FLAGS          = DDP_FLAG_VERSION1 | DDP_FLAG_PUSH;
+static constexpr uint8_t DDP_DATATYPE_RGB   = 0x00; // 24-bit RGB
+static constexpr size_t  DDP_HEADER_LEN     = 10;
+
+struct Segment { int startIndex; int count; };
+using Shelf = std::vector<Segment>;
+
+static const std::array<Shelf,12> SHELVES = {{
+  // "1"
+  Shelf{ { {  0,13 }, {  97,20 } } },
+  // "2"
+  Shelf{ { { 13,13 }, {  84,13 } } },
+  // "3"
+  Shelf{ { { 26,13 }, {  71,13 } } },
+  // "4"
+  Shelf{ { { 39,32 } } },
+  // "5"
+  Shelf{ { {117,13 }, { 214,20 } } },
+  // "6"
+  Shelf{ { {130,13 }, { 201,13 } } },
+  // "7"
+  Shelf{ { {143,13 }, { 188,13 } } },
+  // "8"
+  Shelf{ { {156,32 } } },
+  // "9"
+  Shelf{ { {234,13 }, { 331,20 } } },
+  // "10"
+  Shelf{ { {247,13 }, { 318,13 } } },
+  // "11"
+  Shelf{ { {260,13 }, { 305,13 } } },
+  // "12"
+  Shelf{ { {273,32 } } }
+}};
+
+
+
 std::vector<uint8_t> buildGammaLUT(float gamma_factor) {
     std::vector<uint8_t> lut(256);
     for (int i = 0; i < 256; ++i) {
@@ -518,7 +560,47 @@ void AmbiPi::render()
 if (_enableGamingTable) {	
     const char* host = "192.168.178.150";
     const char* port = "21324";
+#if 0
+    {
+    // Schrank
+    	const char* host = "192.168.178.146";
+        uint16_t startIndex = 0;
+        std::vector<uint8_t> rgbRight1;
+        std::vector<uint8_t> rgbRight2;
+        rgbRight1.reserve(3 * LEDS_RIGHT);
+        rgbRight2.reserve(3 * LEDS_RIGHT);
+        for (int i = 0; i < LEDS_RIGHT; ++i) {
+{            
+        	uint32_t pix = _ws2811->channel[1].leds[LEDS_BOTTOM + i];
+        	uint8_t r, g, b;
+        	unpackRgb(pix, r, g, b);
+       	        rgbRight2.push_back(r);
+                rgbRight2.push_back(g);
+                rgbRight2.push_back(b);
+}
+{            
+        	uint32_t pix = _ws2811->channel[1].leds[LEDS_BOTTOM + LEDS_RIGHT-1-i];
+        	uint8_t r, g, b;
+        	unpackRgb(pix, r, g, b);
+       	        rgbRight1.push_back(r);
+                rgbRight1.push_back(g);
+                rgbRight1.push_back(b);
+}
+        }
+        
+        rgbRight1 = stretchAndInterpolate(rgbRight1, 50);
+        rgbRight2 = stretchAndInterpolate(rgbRight2, 50);
 
+        sendWledDnRgbRange(host, port,  1, rgbRight1);
+        sendWledDnRgbRange(host, port, 59, rgbRight2);
+
+        sendWledDnRgbRange(host, port,  1+234, rgbRight1);
+        sendWledDnRgbRange(host, port, 59+234, rgbRight2);
+//        sendWledDnRgbRange(host, port, 1+117, rgbRight);
+//        sendWledDnRgbRange(host, port, 1+234, rgbRight);
+    }
+    return;
+#endif    
     // --- Top LEDs: aus channel[0].leds[LEDS_LEFT .. LEDS_LEFT+LEDS_TOP)
     {
         uint16_t startIndex = 0;
@@ -770,6 +852,146 @@ void AmbiPi::calculateDisplayFrameFromFrame(cv::Mat frame)
 	cv::Mat rgbFrame;
 	cv::cvtColor(squareFrame, rgbFrame, cv::COLOR_RGB2BGR);
 	sendFullFrame(rgbFrame);
+}
+
+// Compute total LEDs we need to cover based on shelves 1..12
+static int computeStripLen()
+{
+  int maxIdx = 0;
+  for (const auto& shelf : SHELVES) {
+    for (const auto& seg : shelf) {
+      maxIdx = std::max(maxIdx, seg.startIndex + seg.count);
+    }
+  }
+  return maxIdx; // total LEDs = highest index used
+}
+
+// Map shelf number (1..12) to (x,y) in 6x4 where 1 is top-right,
+// 2 under it, 3 under that, 4 under that, 5 left next to 1, etc.
+static inline void shelfToXY(int shelf, int& x, int& y)
+{
+  // shelves per column = 4 (height)
+  const int colFromRight = (shelf - 1) / 4;   // 0 for shelves 1..4, 1 for 5..8, 2 for 9..12
+  const int rowFromTop   = (shelf - 1) % 4;   // 0..3
+  x = 5 - colFromRight; // 6-wide grid => columns 5,4,3 for shelves 1..12
+  y = rowFromTop;       // top to bottom
+}
+
+// Fill the LED buffer (RGB order) from the 6x4 targetFrame using shelves 1..12 mapping.
+static void buildLedBufferFromFrame(const cv::Mat& targetFrame, std::vector<uint8_t>& rgb)
+{
+  // targetFrame is 6x4, type CV_8UC3, BGR in OpenCV
+  const int totalLeds = computeStripLen();
+  rgb.assign(totalLeds * 3, 0); // zero out unassigned LEDs
+
+  for (int shelfIdx = 0; shelfIdx < 12; ++shelfIdx) {
+    int x, y;
+    shelfToXY(shelfIdx + 1, x, y);
+
+    // Bounds safety
+    if (x < 0 || x >= targetFrame.cols || y < 0 || y >= targetFrame.rows) continue;
+
+    const cv::Vec3b bgr = targetFrame.at<cv::Vec3b>(y, x);
+    const uint8_t R = bgr[2], G = bgr[1], B = bgr[0];
+
+    for (const auto& seg : SHELVES[shelfIdx]) {
+      for (int i = 0; i < seg.count; ++i) {
+        const int led = seg.startIndex + i;
+        if (led < 0) continue;
+        if (led >= totalLeds) break;
+        const int o = led * 3;
+        rgb[o + 0] = R;
+        rgb[o + 1] = G;
+        rgb[o + 2] = B;
+      }
+    }
+  }
+}
+
+// Send a single DDP packet (offset 0) containing the entire LED buffer.
+static bool sendDDP(const std::vector<uint8_t>& rgb)
+{
+#ifdef _WIN32
+  WSADATA wsa;
+  if (WSAStartup(MAKEWORD(2,2), &wsa) != 0) return false;
+#endif
+
+  int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+  if (sockfd < 0) {
+#ifdef _WIN32
+    WSACleanup();
+#endif
+    return false;
+  }
+
+  sockaddr_in addr{};
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons(DDP_PORT);
+  addr.sin_addr.s_addr = inet_addr(DDP_HOST);
+
+  // Build DDP header (10 bytes)
+  std::vector<uint8_t> packet;
+  packet.resize(DDP_HEADER_LEN + rgb.size());
+
+  // Byte 0: flags (version=1 + push)
+  packet[0] = DDP_FLAGS;
+  // Byte 1: sequence (0..255) – you can increment if you want; 0 is fine
+  packet[1] = 0;
+  // Byte 2: data type (RGB)
+  packet[2] = DDP_DATATYPE_RGB;
+  // Byte 3: reserved
+  packet[3] = 0;
+
+  // Bytes 4..7: channel offset (big endian) – we start at 0
+  packet[4] = 0; packet[5] = 0; packet[6] = 0; packet[7] = 0;
+
+  // Bytes 8..9: data length (big endian) – number of channel bytes
+  const uint16_t dataLen = static_cast<uint16_t>(rgb.size());
+  packet[8] = static_cast<uint8_t>((dataLen >> 8) & 0xFF);
+  packet[9] = static_cast<uint8_t>( dataLen       & 0xFF);
+
+  // Payload
+  std::memcpy(packet.data() + DDP_HEADER_LEN, rgb.data(), rgb.size());
+
+  ssize_t sent = sendto(sockfd, reinterpret_cast<const char*>(packet.data()),
+                        static_cast<int>(packet.size()), 0,
+                        reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
+
+#ifdef _WIN32
+  closesocket(sockfd);
+  WSACleanup();
+#else
+  close(sockfd);
+#endif
+
+  return sent == static_cast<ssize_t>(packet.size());
+}
+
+// Call this from your calculateGameWallFrameFromFrame()
+void AmbiPi::sendFrameToGameWall(const cv::Mat& resized6x4BGR)
+{
+  // Build LED buffer
+  std::vector<uint8_t> rgb;
+  buildLedBufferFromFrame(resized6x4BGR, rgb);
+
+  // Send via DDP
+  if (!sendDDP(rgb)) {
+    // handle error (log, retry, etc.)
+  }
+}
+
+
+void AmbiPi::calculateGameWallFrameFromFrame(cv::Mat frame)
+{
+	int w = frame.cols;
+	int h = frame.rows;
+
+	int interpolation = cv::INTER_LANCZOS4; // INTER_CUBIC
+
+	cv::Mat targetFrame;
+	cv::resize(frame, targetFrame, cv::Size(6, 4), 0, 0, interpolation);
+
+	sendFrameToGameWall(targetFrame);
 }
 
 bool AmbiPi::sendFullFrame(cv::Mat frame)

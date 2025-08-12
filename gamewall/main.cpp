@@ -301,6 +301,9 @@ private:
         // New shelf API: body only needs shelf + color (+ optional timeoutSeconds)
         Routes::Post(router_, "/api/v1/wled/shelf-color",
                      Routes::bind(&WledApiServer::postShelfColor, this));
+                     
+        Routes::Post(router_, "/api/v1/wled/shelves-color",
+             Routes::bind(&WledApiServer::postShelvesColor, this));
 
         // Static: swagger.json + index.html
         Routes::Get(router_, "/",                    Routes::bind(&WledApiServer::getIndex, this));
@@ -526,6 +529,58 @@ private:
 
         return sendJson(resp, Http::Code::Ok, {{"ok", true}, {"applied", applied}, {"shelf", shelfIdx}});
     }
+    
+    void postShelvesColor(const Rest::Request& req, Http::ResponseWriter resp) {
+    json body;
+    try { body = json::parse(req.body()); }
+    catch (...) { return sendJson(resp, Http::Code::Bad_Request, {{"ok",false},{"error","Invalid JSON"}}); }
+
+    if (!body.contains("shelves") || !body["shelves"].is_array() || body["shelves"].empty())
+        return sendJson(resp, Http::Code::Bad_Request, {{"ok",false},{"error","Field 'shelves' (non-empty array) is required"}});
+
+    if (!body.contains("color") || !body["color"].is_string())
+        return sendJson(resp, Http::Code::Bad_Request, {{"ok",false},{"error","Field 'color' (string) is required"}});
+
+    uint8_t r=0,g=0,b=0;
+    const std::string color = body["color"].get<std::string>();
+    if (!parseHexColor(color, r, g, b))
+        return sendJson(resp, Http::Code::Bad_Request, {{"ok",false},{"error","color must be RRGGBB / #RRGGBB / 0xRRGGBB"}});
+
+    uint8_t timeoutSeconds = 2;
+    if (auto it = body.find("timeoutSeconds"); it!=body.end())
+        timeoutSeconds = static_cast<uint8_t>(std::clamp<int>(it->get<int>(), 0, 255));
+
+    // Load shelves.json
+    ShelvesConfig cfg; std::string err;
+    if (!shelvesStore_->ensureLoaded(cfg, err))
+        return sendJson(resp, Http::Code::Internal_Server_Error, {{"ok",false},{"error",err}});
+
+    // Iterate in the order provided, send sequentially
+    uint32_t appliedShelves = 0;
+    for (const auto& v : body["shelves"]) {
+        if (!v.is_number_integer()) continue;
+        int shelfIdx = v.get<int>();
+        auto it = cfg.shelves.find(shelfIdx);
+        if (it == cfg.shelves.end() || it->second.empty()) continue;
+
+        bool anyOk = false;
+        for (const auto& rge : it->second) {
+            if (!rge.count || rge.startIndex + rge.count - 1 > 0xFFFF) continue;
+            std::vector<uint8_t> payload; payload.reserve(rge.count*3);
+            for (uint32_t i=0;i<rge.count;++i){ payload.push_back(r); payload.push_back(g); payload.push_back(b); }
+            anyOk |= sendWledDnRgbRange(cfg.host.c_str(), cfg.port.c_str(),
+                                        static_cast<uint16_t>(rge.startIndex), payload, timeoutSeconds);
+            // tiny pacing to avoid UDP bursts
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        if (anyOk) ++appliedShelves;
+    }
+
+    if (!appliedShelves)
+        return sendJson(resp, Http::Code::Internal_Server_Error, {{"ok",false},{"error","No shelves applied"}});
+
+    return sendJson(resp, Http::Code::Ok, {{"ok",true},{"applied",appliedShelves}});
+  }
 
     std::shared_ptr<Http::Endpoint> httpEndpoint_;
     Rest::Router router_;
