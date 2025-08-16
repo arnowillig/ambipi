@@ -1,44 +1,55 @@
-
 SOURCES = $(wildcard *.cpp)
 HEADERS = $(wildcard *.h)
-OBJECTS = $(SOURCES:.cpp=.o)  
+OBJECTS = $(SOURCES:.cpp=.o)
 
+# --- OpenCV via pkg-config ---
+OPENCV_CFLAGS := $(shell pkg-config --cflags opencv4 2>/dev/null || pkg-config --cflags opencv)
+OPENCV_LIBS   := $(shell pkg-config --libs   opencv4 2>/dev/null || pkg-config --libs   opencv)
+
+# --- Includes / flags ---
+INCLUDES += -I pistache/include/ -I /opt/vc/include
+CXXFLAGS += -Wfatal-errors -Wno-deprecated-declarations -std=c++2a $(INCLUDES) $(OPENCV_CFLAGS)
+# pthread on both compile & link
+CXXFLAGS += -pthread
+
+# --- Libraries ---
 LIBS += rpi_ws281x/build/libws2811.a
 LIBS += pistache/build/src/libpistache.a
-LIBS += -lopencv_core -lopencv_imgproc -lopencv_videoio -lopencv_imgcodecs -lpthread 
-
-INCLUDES += -I pistache/include/ -I /opt/vc/include -I /usr/include/opencv4/
-
-CFLAGS += -Wfatal-errors -Wno-deprecated-declarations
+LIBS += $(OPENCV_LIBS) -lpthread
 
 TARGET = ambipi
 
+# Dispmanx (kept as-is)
 ifneq ("$(wildcard /opt/vc/lib/libbcm_host.so)","")
-	HAVE_DISPMANX = 1
-	LIBS += /opt/vc/lib/libbcm_host.so
+    HAVE_DISPMANX = 1
+    LIBS += /opt/vc/lib/libbcm_host.so
 else
-	HAVE_DISPMANX = 0
+    HAVE_DISPMANX = 0
 endif
 
-CFLAGS += -DHAVE_DISPMANX=$(HAVE_DISPMANX) -std=c++2a
+CXXFLAGS += -DHAVE_DISPMANX=$(HAVE_DISPMANX)
+
+# Filesystem lib only needed on very old GCC; keep if you still need it
 LIBS += -lstdc++fs
 
 all: $(TARGET)
 
 %.o: %.cpp $(HEADERS)
 	@echo "Compiling $@ ..."
-	$(CXX) $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(TARGET): rpi_ws281x/build/libws2811.a pistache/build/src/libpistache.a $(OBJECTS)
 	@echo "Linking $@ ..."
-	@$(CXX) -Wfatal-errors -o $(TARGET)   $(OBJECTS) $(LIBS)
+	@$(CXX) -Wfatal-errors -o $(TARGET) $(OBJECTS) $(LIBS)
 
 rpi_ws281x/build/libws2811.a:
-	@cd rpi_ws281x; mkdir build; cd build; cmake ..
+	@mkdir -p rpi_ws281x/build
+	@cd rpi_ws281x/build && cmake ..
 	@$(MAKE) -C rpi_ws281x/build
 
 pistache/build/src/libpistache.a:
-	@cd pistache; mkdir build; cd build; cmake cmake -DPISTACHE_BUILD_TESTS=OFF ..
+	@mkdir -p pistache/build
+	@cd pistache/build && cmake -DPISTACHE_BUILD_TESTS=OFF ..
 	@$(MAKE) -C pistache/build
 
 clean:
@@ -47,7 +58,7 @@ clean:
 distclean: clean
 	@rm -rf rpi_ws281x/build pistache/build
 
-run:	ambipi
+run: ambipi
 	sudo ./ambipi
 
 restart: $(TARGET)
@@ -57,5 +68,3 @@ log: $(TARGET)
 	sudo journalctl --vacuum-time=1s -u ambipi.service
 	sudo journalctl --rotate  -u ambipi.service
 	sudo journalctl -u ambipi.service
-
-	

@@ -117,6 +117,8 @@ private:
 	bool _enableDisplayVideo;
 	bool _enableGamingTable;
 	std::vector<uint8_t> _lut;
+	
+	std::vector<uint8_t> lastFrame_;
 	void unpackRgb(uint32_t packed, uint8_t &r, uint8_t &g, uint8_t &b);
 	bool sendKDPDatagram(const uint8_t *data, size_t size);
 	bool sendFullFrame(cv::Mat frame);

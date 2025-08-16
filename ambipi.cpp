@@ -44,31 +44,62 @@ static constexpr size_t  DDP_HEADER_LEN     = 10;
 struct Segment { int startIndex; int count; };
 using Shelf = std::vector<Segment>;
 
-static const std::array<Shelf,12> SHELVES = {{
-  // "1"
-  Shelf{ { {  0,13 }, {  97,20 } } },
+
+// Segments Order: Left Right, Top, Bottom
+static const std::array<Shelf,24> SHELVES = {{
+  // "1" 
+  Shelf{ { {  97,12 }, {   0,13 }, { 109,8 }, {   0,0 } } },
   // "2"
-  Shelf{ { { 13,13 }, {  84,13 } } },
+  Shelf{ { {  84,13 }, {  13,13 }, {   0,0 }, {   0,0 } } },
   // "3"
-  Shelf{ { { 26,13 }, {  71,13 } } },
+  Shelf{ { {  71,13 }, {  26,13 }, {   0,0 }, {   0,0 } } },
   // "4"
-  Shelf{ { { 39,32 } } },
+  Shelf{ { {  59,12 }, {  39,12 }, {   0,0 }, {  51,8 } } },
+
   // "5"
-  Shelf{ { {117,13 }, { 214,20 } } },
+  Shelf{ { {117,12 }, { 214,12 }, { 226,8 }, {  0,0 } } },
   // "6"
-  Shelf{ { {130,13 }, { 201,13 } } },
+  Shelf{ { {130,13 }, { 201,13 }, {  0,0 }, {  0,0 } } },
   // "7"
-  Shelf{ { {143,13 }, { 188,13 } } },
+  Shelf{ { {143,13 }, { 188,13 }, {  0,0 }, {  0,0 } } },
   // "8"
-  Shelf{ { {156,32 } } },
+  Shelf{ { {156,12 }, { 176,12 }, {  0,0 }, { 164,8 } } },
+
   // "9"
-  Shelf{ { {234,13 }, { 331,20 } } },
+  Shelf{ { { 331,12 }, { 234,13 }, { 343,8 }, {  0,0 } } },
   // "10"
-  Shelf{ { {247,13 }, { 318,13 } } },
+  Shelf{ { { 318,13 }, { 247,13 }, {  0,0 }, {  0,0 } } },
   // "11"
-  Shelf{ { {260,13 }, { 305,13 } } },
+  Shelf{ { { 305,13 }, { 260,13 }, {  0,0 }, {  0,0 } } },
   // "12"
-  Shelf{ { {273,32 } } }
+  Shelf{ { { 293,12 }, { 273,12 }, {  0,0 }, { 285, 8 } } },
+
+  // "13"
+  Shelf{ { { 331+117,12 }, { 234+117,13 }, { 343+117,8 }, {  0,0 } } },
+  // "14"
+  Shelf{ { { 318+117,13 }, { 247+117,13 }, {  0,0 }, {  0,0 } } },
+  // "15"
+  Shelf{ { { 305+117,13 }, { 260+117,13 }, {  0,0 }, {  0,0 } } },
+  // "16"
+  Shelf{ { { 293+117,12 }, { 273+117,12 }, {  0,0 }, { 285+117, 8 } } },
+
+  // "17"
+  Shelf{ { { 331+2*117,12 }, { 234+2*117,13 }, { 343+2*117,8 }, {  0,0 } } },
+  // "18"
+  Shelf{ { { 318+2*117,13 }, { 247+2*117,13 }, {  0,0 }, {  0,0 } } },
+  // "19"
+  Shelf{ { { 305+2*117,13 }, { 260+2*117,13 }, {  0,0 }, {  0,0 } } },
+  // "20"
+  Shelf{ { { 293+2*117,12 }, { 273+2*117,12 }, {  0,0 }, { 285+2*117, 8 } } },
+
+  // "21"
+  Shelf{ { { 331+3*117,12 }, { 234+3*117,13 }, { 343+3*117,8 }, {  0,0 } } },
+  // "22"
+  Shelf{ { { 318+3*117,13 }, { 247+3*117,13 }, {  0,0 }, {  0,0 } } },
+  // "23"
+  Shelf{ { { 305+3*117,13 }, { 260+3*117,13 }, {  0,0 }, {  0,0 } } },
+  // "24"
+  Shelf{ { { 293+3*117,12 }, { 273+3*117,12 }, {  0,0 }, { 285+3*117, 8 } } }
 }};
 
 
@@ -857,6 +888,7 @@ void AmbiPi::calculateDisplayFrameFromFrame(cv::Mat frame)
 // Compute total LEDs we need to cover based on shelves 1..12
 static int computeStripLen()
 {
+// return 351;
   int maxIdx = 0;
   for (const auto& shelf : SHELVES) {
     for (const auto& seg : shelf) {
@@ -884,7 +916,7 @@ static void buildLedBufferFromFrame(const cv::Mat& targetFrame, std::vector<uint
   const int totalLeds = computeStripLen();
   rgb.assign(totalLeds * 3, 0); // zero out unassigned LEDs
 
-  for (int shelfIdx = 0; shelfIdx < 12; ++shelfIdx) {
+  for (int shelfIdx = 0; shelfIdx < 24; ++shelfIdx) {
     int x, y;
     shelfToXY(shelfIdx + 1, x, y);
 
@@ -909,18 +941,11 @@ static void buildLedBufferFromFrame(const cv::Mat& targetFrame, std::vector<uint
 }
 
 // Send a single DDP packet (offset 0) containing the entire LED buffer.
+/*
 static bool sendDDP(const std::vector<uint8_t>& rgb)
 {
-#ifdef _WIN32
-  WSADATA wsa;
-  if (WSAStartup(MAKEWORD(2,2), &wsa) != 0) return false;
-#endif
-
   int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
   if (sockfd < 0) {
-#ifdef _WIN32
-    WSACleanup();
-#endif
     return false;
   }
 
@@ -957,16 +982,105 @@ static bool sendDDP(const std::vector<uint8_t>& rgb)
                         static_cast<int>(packet.size()), 0,
                         reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
 
-#ifdef _WIN32
-  closesocket(sockfd);
-  WSACleanup();
-#else
   close(sockfd);
-#endif
 
   return sent == static_cast<ssize_t>(packet.size());
 }
+*/
 
+static bool sendDDP(const std::vector<uint8_t>& rgb)
+{
+    if (rgb.empty())
+        return true; // nothing to send is "success"
+
+    // --- Socket ---
+    const int sockfd = ::socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd < 0) {
+        return false;
+    }
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port   = htons(DDP_PORT);
+
+    // Prefer inet_pton over inet_addr (inet_addr is deprecated and returns -1 on error)
+    if (::inet_pton(AF_INET, DDP_HOST, &addr.sin_addr) != 1) {
+        ::close(sockfd);
+        return false;
+    }
+
+    // --- Chunking parameters ---
+    constexpr size_t kUdpPayloadBudget = 1472; // IP(20)+UDP(8) deducted from MTU 1500
+    constexpr size_t kHeaderLen        = DDP_HEADER_LEN; // 10
+    static_assert(kHeaderLen == 10, "DDP header must be 10 bytes");
+
+    // Max RGB bytes per packet; keep multiple of 3 (RGB)
+    const size_t maxDataPerPacket = ((kUdpPayloadBudget - kHeaderLen) / 3) * 3; // e.g. 1461
+
+    // Sequence can be static so it continues across frames (optional)
+    static uint8_t seq = 0;
+
+    size_t offsetBytes = 0;
+    while (offsetBytes < rgb.size()) {
+        const size_t remaining = rgb.size() - offsetBytes;
+        const size_t chunkBytes = static_cast<uint16_t>(std::min(remaining, maxDataPerPacket)); // <= 65535
+
+        // Build one DDP packet
+        std::vector<uint8_t> packet;
+        packet.resize(kHeaderLen + chunkBytes);
+
+        // Byte 0: flags (version + push)
+        packet[0] = DDP_FLAGS;
+
+        // Byte 1: sequence (increments each packet; receiver can drop dupes/out-of-order)
+        packet[1] = seq++;
+
+        // Byte 2: data type (RGB)
+        packet[2] = DDP_DATATYPE_RGB;
+
+        // Byte 3: reserved
+        packet[3] = 0;
+
+        // Bytes 4..7: channel offset (big endian) — **in BYTES** for RGB streams
+        const uint32_t chanOff = static_cast<uint32_t>(offsetBytes);
+        packet[4] = static_cast<uint8_t>((chanOff >> 24) & 0xFF);
+        packet[5] = static_cast<uint8_t>((chanOff >> 16) & 0xFF);
+        packet[6] = static_cast<uint8_t>((chanOff >>  8) & 0xFF);
+        packet[7] = static_cast<uint8_t>( chanOff        & 0xFF);
+
+        // Bytes 8..9: data length (big endian) — number of data bytes in this packet
+        const uint16_t dataLen = static_cast<uint16_t>(chunkBytes);
+        packet[8] = static_cast<uint8_t>((dataLen >> 8) & 0xFF);
+        packet[9] = static_cast<uint8_t>( dataLen       & 0xFF);
+
+        // Payload
+        std::memcpy(packet.data() + kHeaderLen, rgb.data() + offsetBytes, chunkBytes);
+
+        // Send
+        const ssize_t sent = ::sendto(
+            sockfd,
+            reinterpret_cast<const char*>(packet.data()),
+            static_cast<int>(packet.size()),
+            0,
+            reinterpret_cast<sockaddr*>(&addr),
+            sizeof(addr)
+        );
+
+        if (sent != static_cast<ssize_t>(packet.size())) {
+            ::close(sockfd);
+            return false;
+        }
+
+        offsetBytes += chunkBytes;
+    }
+
+    ::close(sockfd);
+    return true;
+}
+
+
+
+/*
 // Call this from your calculateGameWallFrameFromFrame()
 void AmbiPi::sendFrameToGameWall(const cv::Mat& resized6x4BGR)
 {
@@ -978,6 +1092,33 @@ void AmbiPi::sendFrameToGameWall(const cv::Mat& resized6x4BGR)
   if (!sendDDP(rgb)) {
     // handle error (log, retry, etc.)
   }
+}
+*/
+void AmbiPi::sendFrameToGameWall(const cv::Mat& resized6x4BGR)
+{
+    // Build raw LED buffer for this frame
+    std::vector<uint8_t> current;
+    buildLedBufferFromFrame(resized6x4BGR, current);
+
+    // Allocate lastFrame_ on first call
+    if (lastFrame_.size() != current.size()) {
+        lastFrame_ = current; // no smoothing on first frame
+    }
+
+    // Blend: out = last*alpha + current*(1-alpha)
+    // constexpr float alpha = 0.7f; // weight for previous frame
+    for (size_t i = 0; i < current.size(); ++i) {
+        float blended = lastFrame_[i] * _alpha + current[i] * (1.0f - _alpha);
+        current[i] = static_cast<uint8_t>(std::lround(blended));
+    }
+
+    // Update history
+    lastFrame_ = current;
+
+    // Send via DDP
+    if (!sendDDP(current)) {
+        // handle error (log, retry, etc.)
+    }
 }
 
 
