@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Gamewall Shelves</title>
+  <title>Gamewall Shelves (6×4 = 24)</title>
   <style>
-    /* Minimal, mobile-safe, ALWAYS 2 columns */
+    /* Minimal, mobile-safe, ALWAYS 6 columns */
     :root{--bg:#0f1117;--fg:#eaeefb;--muted:#9aa4b2;--card:#151824;--accent:#4f46e5;}
     html,body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,"Noto Sans",sans-serif;}
     header{padding:16px 20px;display:flex;gap:16px;align-items:center;background:#0b0d13;border-bottom:1px solid #1e2230;}
     h1{font-size:18px;margin:0;}
-    main{padding:20px;max-width:960px;margin:0 auto;display:grid;grid-template-columns:1fr;gap:20px;}
+    main{padding:20px;max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1fr;gap:20px;}
     .card{background:var(--card);border:1px solid #1e2230;border-radius:16px;padding:16px;box-shadow:0 8px 30px rgba(0,0,0,.2);}
     .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
     input[type="color"]{width:56px;height:38px;border:none;background:transparent;}
@@ -19,52 +19,10 @@
     .error{color:#ff6b6b;}
     a{color:#8ab4ff;text-decoration:none;margin-left:auto}
 
-    /* 🔒 Force exactly 2 columns at all widths */
-    .grid2{
+    /* 🔒 Force exactly 6 columns at all widths */
+    .grid6{
       display:grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr)) !important; /* force two columns */
-      gap:14px;
-    }
-
-    .shelf{
-      display:flex;align-items:center;justify-content:space-between;gap:12px;
-      padding:12px;border-radius:14px;border:1px solid #23283b;background:#0d0f16;
-    }
-    .shelf-title{font-weight:700;}
-  </style>
-</head>
-<body>
-<header>
-  <h1>Gamewall Shelves</h1>
-  <a href="/swagger.json" target="_blank" rel="noreferrer">swagger.json</a>
-</header>
-
-<main>
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Gamewall Shelves</title>
-  <style>
-    /* Minimal, mobile-safe, ALWAYS 3 columns */
-    :root{--bg:#0f1117;--fg:#eaeefb;--muted:#9aa4b2;--card:#151824;--accent:#4f46e5;}
-    html,body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,"Noto Sans",sans-serif;}
-    header{padding:16px 20px;display:flex;gap:16px;align-items:center;background:#0b0d13;border-bottom:1px solid #1e2230;}
-    h1{font-size:18px;margin:0;}
-    main{padding:20px;max-width:960px;margin:0 auto;display:grid;grid-template-columns:1fr;gap:20px;}
-    .card{background:var(--card);border:1px solid #1e2230;border-radius:16px;padding:16px;box-shadow:0 8px 30px rgba(0,0,0,.2);}
-    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-    input[type="color"]{width:56px;height:38px;border:none;background:transparent;}
-    button{background:var(--accent);color:white;border:none;padding:10px 14px;border-radius:12px;cursor:pointer;font-weight:600;}
-    .status{margin-top:8px;min-height:22px;font-size:13px;color:#9ee493;}
-    .error{color:#ff6b6b;}
-    a{color:#8ab4ff;text-decoration:none;margin-left:auto}
-
-    /* 🔒 Force exactly 3 columns at all widths */
-    .grid3{
-      display:grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr)) !important; /* force three columns */
+      grid-template-columns: repeat(6, minmax(0, 1fr)) !important; /* force six columns */
       gap:14px;
     }
 
@@ -94,39 +52,51 @@
   <section class="card">
     <h3 style="margin:4px 0 12px 0;">Select a shelf</h3>
 
-    <!-- EXACT order, 3 columns × 4 rows:
-         Col1 (left):  9,10,11,12
-         Col2 (middle):5, 6, 7, 8
-         Col3 (right): 1, 2, 3, 4
-         Row-wise reading (bulk send): 9|5|1 · 10|6|2 · 11|7|3 · 12|8|4
+    <!-- EXACT order, 6 columns × 4 rows:
+         Col1 (left):  21,22,23,24
+         Col2:         17,18,19,20
+         Col3:         13,14,15,16
+         Col4:         9, 10,11,12
+         Col5:         5,  6, 7, 8
+         Col6 (right): 1,  2, 3, 4
     -->
-    <div class="grid3">
+    <div class="grid6">
       <!-- Row 1 -->
+      <div class="shelf"><button data-shelf="21" aria-label="Apply to shelf 21">Shelf 21</button></div>
+      <div class="shelf"><button data-shelf="17" aria-label="Apply to shelf 17">Shelf 17</button></div>
+      <div class="shelf"><button data-shelf="13" aria-label="Apply to shelf 13">Shelf 13</button></div>
       <div class="shelf"><button data-shelf="9"  aria-label="Apply to shelf 9">Shelf 9</button></div>
       <div class="shelf"><button data-shelf="5"  aria-label="Apply to shelf 5">Shelf 5</button></div>
       <div class="shelf"><button data-shelf="1"  aria-label="Apply to shelf 1">Shelf 1</button></div>
 
       <!-- Row 2 -->
+      <div class="shelf"><button data-shelf="22" aria-label="Apply to shelf 22">Shelf 22</button></div>
+      <div class="shelf"><button data-shelf="18" aria-label="Apply to shelf 18">Shelf 18</button></div>
+      <div class="shelf"><button data-shelf="14" aria-label="Apply to shelf 14">Shelf 14</button></div>
       <div class="shelf"><button data-shelf="10" aria-label="Apply to shelf 10">Shelf 10</button></div>
       <div class="shelf"><button data-shelf="6"  aria-label="Apply to shelf 6">Shelf 6</button></div>
       <div class="shelf"><button data-shelf="2"  aria-label="Apply to shelf 2">Shelf 2</button></div>
 
       <!-- Row 3 -->
+      <div class="shelf"><button data-shelf="23" aria-label="Apply to shelf 23">Shelf 23</button></div>
+      <div class="shelf"><button data-shelf="19" aria-label="Apply to shelf 19">Shelf 19</button></div>
+      <div class="shelf"><button data-shelf="15" aria-label="Apply to shelf 15">Shelf 15</button></div>
       <div class="shelf"><button data-shelf="11" aria-label="Apply to shelf 11">Shelf 11</button></div>
       <div class="shelf"><button data-shelf="7"  aria-label="Apply to shelf 7">Shelf 7</button></div>
       <div class="shelf"><button data-shelf="3"  aria-label="Apply to shelf 3">Shelf 3</button></div>
 
       <!-- Row 4 -->
+      <div class="shelf"><button data-shelf="24" aria-label="Apply to shelf 24">Shelf 24</button></div>
+      <div class="shelf"><button data-shelf="20" aria-label="Apply to shelf 20">Shelf 20</button></div>
+      <div class="shelf"><button data-shelf="16" aria-label="Apply to shelf 16">Shelf 16</button></div>
       <div class="shelf"><button data-shelf="12" aria-label="Apply to shelf 12">Shelf 12</button></div>
       <div class="shelf"><button data-shelf="8"  aria-label="Apply to shelf 8">Shelf 8</button></div>
       <div class="shelf"><button data-shelf="4"  aria-label="Apply to shelf 4">Shelf 4</button></div>
     </div>
 
-    <div style="font-size:12px;color:var(--muted);margin-top:10px;">
-      Order: 9 | 5 | 1 · 10 | 6 | 2 · 11 | 7 | 3 · 12 | 8 | 4 (always three columns)
-    </div>
   </section>
 </main>
+
 <script>
 const statusEl = document.getElementById('status');
 const pickColor = () => document.getElementById('color').value.trim();
@@ -154,6 +124,7 @@ async function applyShelf(shelfIndex, color) {
 
 /**
  * Apply color to multiple shelves via the bulk API (server does sequential sending).
+ * The sending order matches the grid's row-wise left→right layout (6×4).
  */
 async function applyShelvesBulk(shelves, color) {
   const res = await fetch('/api/v1/wled/shelves-color', {
@@ -185,10 +156,7 @@ document.querySelectorAll('button[data-shelf]').forEach(btn => {
 // "Apply to All" button
 document.getElementById('all').addEventListener('click', async () => {
   const color = pickColor();
-
-  // New cupboard order for 3 columns × 4 rows:
-  // Row-wise left→right: 9,5,1, 10,6,2, 11,7,3, 12,8,4
-  const order = [9, 5, 1, 10, 6, 2, 11, 7, 3, 12, 8, 4];
+  const order = [1,2,3,4,8,12,16,20,24,23,22,21,17,13,9,5,6,7,11,15,19,18,14,10];
 
   statusEl.classList.remove('error');
   statusEl.textContent = 'Sending to all shelves...';
