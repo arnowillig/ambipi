@@ -858,37 +858,17 @@ cv::Mat AmbiPi::cropBorders(cv::Mat frame, bool debug) const
 
 void AmbiPi::calculateDisplayFrameFromFrame(cv::Mat frame)
 {
-    // AspectFit the incoming frame into a 32x32 canvas (letterboxed/pillarboxed),
-    // do NOT use _cropRect here.
-    if (frame.empty()) return;
+	int w = frame.cols;
+	int h = frame.rows;
 
-    const int targetW = 32;
-    const int targetH = 32;
+	int interpolation = cv::INTER_LANCZOS4; // INTER_CUBIC
 
-    const int w = frame.cols;
-    const int h = frame.rows;
+	cv::Mat squareFrame;
+	cv::resize(frame(cv::Rect((w-h)/2,0, h, h)), squareFrame, cv::Size(32, 32), 0, 0, interpolation);
 
-    // Scale to fit inside 32x32 while preserving aspect ratio
-    const double sx = static_cast<double>(targetW) / std::max(1, w);
-    const double sy = static_cast<double>(targetH) / std::max(1, h);
-    const double s  = std::min(sx, sy); // AspectFit
-
-    int rw = std::max(1, static_cast<int>(std::round(w * s)));
-    int rh = std::max(1, static_cast<int>(std::round(h * s)));
-
-    cv::Mat resized;
-    cv::resize(frame, resized, cv::Size(rw, rh), 0, 0, cv::INTER_AREA);
-
-    // Center on a 32x32 black canvas
-    cv::Mat canvas(targetH, targetW, CV_8UC3, cv::Scalar(0, 0, 0));
-    const int x0 = (targetW - rw) / 2;
-    const int y0 = (targetH - rh) / 2;
-    resized.copyTo(canvas(cv::Rect(x0, y0, rw, rh)));
-
-    // Convert to RGB and send
-    cv::Mat rgb32;
-    cv::cvtColor(canvas, rgb32, cv::COLOR_BGR2RGB);
-    sendFullFrame(rgb32);
+	cv::Mat rgbFrame;
+	cv::cvtColor(squareFrame, rgbFrame, cv::COLOR_BGR2RGB);
+	sendFullFrame(rgbFrame);
 }
 
 // Compute total LEDs we need to cover based on loaded shelves
