@@ -7,6 +7,11 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <iostream>
+#include <fstream>
+#include <algorithm>
+#include <unordered_map>
+#include <cstring>
 
 #include "rpi_ws281x/ws2811.h"
 #include <nlohmann/json.hpp>
@@ -35,8 +40,9 @@
 
 
 
-static const char* DDP_HOST = "192.168.178.146";
-static const uint16_t DDP_PORT = 4048;
+static const char* DDP_HOST_RIGHT = "192.168.178.146"; // shelves 1..24
+static const char* DDP_HOST_LEFT  = "192.168.178.185"; // shelves 25..40
+static const uint16_t DDP_PORT    = 4048;
 static constexpr uint8_t DDP_FLAG_VERSION1  = 0x40; // version=1 (bits 6..7)
 static constexpr uint8_t DDP_FLAG_PUSH      = 0x01; // push frame immediately
 static constexpr uint8_t DDP_FLAGS          = DDP_FLAG_VERSION1 | DDP_FLAG_PUSH;
@@ -47,7 +53,7 @@ struct Segment { int startIndex; int count; };
 using Shelf = std::vector<Segment>;
 
 // --- Dynamic shelves loaded from JSON ---
-static std::vector<Shelf> G_SHELVES; // first 32 shelves
+static std::vector<Shelf> G_SHELVES; // first 40 shelves
 static bool G_LOADED = false;
 
 static bool loadShelvesFromJson()
@@ -60,7 +66,7 @@ static bool loadShelvesFromJson()
         nlohmann::json j; ifs >> j;
         if (!j.is_array()) { std::cerr << "[ERROR] shelves.json is not an array\n"; return false; }
         G_SHELVES.clear();
-        size_t take = std::min<size_t>(32, j.size());
+        size_t take = std::min<size_t>(40, j.size());
         G_SHELVES.reserve(take);
         for (size_t i = 0; i < take; ++i) {
             const auto& item = j[i];
@@ -878,53 +884,101 @@ static int computeStripLen()
   return maxIdx;
 }
 
-// Map shelf number (1..32) to (x,y) in 10x4 grid: 1..24 right 6x4 (x=4..9), 25..32 in left 4x4 L grid (x=0..3)
-static inline void shelfToXY32(int shelf, int& x, int& y)
+// Compute total LEDs for a subset of shelves [first..last] (1-based, inclusive)
+static int computeStripLenRange(int first, int last)
 {
-  // Right board (1..24): 6 columns (rightmost is shelf 1..4), 4 rows; grid X = 4..9
-  if (shelf >= 1 && shelf <= 24) {
-    const int colFromRight = (shelf - 1) / 4;   // 0 for 1..4, 1 for 5..8, ..., 5 for 21..24
-    const int rowFromTop   = (shelf - 1) % 4;   // 0..3
-    x = 9 - colFromRight; // columns 9..4
-    y = rowFromTop;       // rows 0..3
-    return;
+  if (!G_LOADED) loadShelvesFromJson();
+  first = std::max(1, first); last = std::min<int>(last, static_cast<int>(G_SHELVES.size()));
+  int maxIdx = 0;
+  for (int s = first; s <= last; ++s) {
+    const auto& shelf = G_SHELVES[s-1];
+    for (const auto& seg : shelf) maxIdx = std::max(maxIdx, seg.startIndex + seg.count);
   }
-  // Left board (25..32): L-formed 4×4 per layout:
-  // Row0: -- -- 29 25
-  // Row1: -- -- 30 26
-  // Row2: 35 33 31 27
-  // Row3: 36 34 32 28
-  static const std::unordered_map<int, std::pair<int,int>> L_POS = {
-    {29,{2,0}},{25,{3,0}},
-    {30,{2,1}},{26,{3,1}},
-    {35,{0,2}},{33,{1,2}},{31,{2,2}},{27,{3,2}},
-    {36,{0,3}},{34,{1,3}},{32,{2,3}},{28,{3,3}}
-  };
-  auto it = L_POS.find(shelf);
-  if (it != L_POS.end()) { x = it->second.first; y = it->second.second; return; }
-  // Fallback: clamp inside left grid
+  return maxIdx;
+}
+
+// --- Mapping tweak flags: flip axes if the layout feels mirrored ---
+static const bool kMirrorRightX = false;  // flip left/right for shelves 1..24
+static const bool kMirrorRightY = false;  // flip top/bottom for shelves 1..24
+static const bool kMirrorLeftX  = false;  // flip left/right for shelves 25..40 (L)
+static const bool kMirrorLeftY  = false;  // flip top/bottom for shelves 25..40 (L)
+
+// Map shelf number (1..40) to (x,y) in a 10x4 grid.
+// Right board (1..24): 6 columns × 4 rows (x = 4..9), row-major, top→bottom, left→right.
+// Left board (25..40): L-formed in the same 10×4 view:
+// Row0: -- -- -- -- 25 26
+// Row1: -- -- -- -- 27 28
+// Row2: 29 30 31 32 33 34
+// Row3: 35 36 37 38 39 40
+static inline void shelfToXY(int shelf, int& x, int& y)
+{
+  // Right board (1..24)
+  if (shelf >= 1 && shelf <= 24) {
+    const int row = (shelf - 1) / 6;   // 0..3
+    const int col = (shelf - 1) % 6;   // 0..5
+    int xr = 4 + col; // right board occupies x = 4..9
+    int yr = row;     // y = 0..3
+    if (kMirrorRightX) xr = 4 + (5 - col);
+    if (kMirrorRightY) yr = 3 - row;
+    x = xr; y = yr; return;
+  }
+
+  // Left board (25..40)
+  if (shelf >= 25 && shelf <= 40) {
+    int xl = 0, yl = 0;
+    if (shelf <= 28) {
+      // top-right 2×2: (x,y) = (4,0),(5,0),(4,1),(5,1)
+      const int i = shelf - 25; // 0..3
+      yl = i / 2;               // 0,0,1,1
+      xl = 4 + (i % 2);         // 4,5,4,5
+    } else if (shelf <= 34) {
+      // full row y=2, x=0..5 for 29..34
+      xl = (shelf - 29); // 0..5
+      yl = 2;
+    } else {
+      // full row y=3, x=0..5 for 35..40
+      xl = (shelf - 35); // 0..5
+      yl = 3;
+    }
+    if (kMirrorLeftX) xl = 5 - xl; // flip within 6-wide view
+    if (kMirrorLeftY) yl = 3 - yl;
+    x = xl; y = yl; return;
+  }
+
+  // Fallback
   x = 0; y = 0;
 }
 
-// Fill the LED buffer (RGB order) from the 10x4 targetFrame using shelves 1..32 mapping.
-static void buildLedBufferFromFrame(const cv::Mat& targetFrame, std::vector<uint8_t>& rgb)
+// Build two LED buffers (right board = shelves 1..24, left board = shelves 25..40)
+static void buildLedBuffersFromFrame(const cv::Mat& targetFrame,
+                                     std::vector<uint8_t>& rightRgb,
+                                     std::vector<uint8_t>& leftRgb)
 {
   if (!G_LOADED) loadShelvesFromJson();
-  const int totalLeds = computeStripLen();
-  rgb.assign(std::max(0, totalLeds) * 3, 0);
+  const int rightLeds = computeStripLenRange(1, 24);
+  const int leftLeds  = computeStripLenRange(25, 40);
+  rightRgb.assign(std::max(0, rightLeds) * 3, 0);
+  leftRgb.assign (std::max(0, leftLeds)  * 3, 0);
 
-  const int useShelves = static_cast<int>(std::min<size_t>(G_SHELVES.size(), 32));
+  const int useShelves = static_cast<int>(std::min<size_t>(G_SHELVES.size(), 40));
   for (int idx = 0; idx < useShelves; ++idx) {
-    int x, y; shelfToXY32(idx + 1, x, y);
+    const int shelfNo = idx + 1;
+    int x, y; shelfToXY(shelfNo, x, y);
     if (x < 0 || x >= targetFrame.cols || y < 0 || y >= targetFrame.rows) continue;
     const cv::Vec3b bgr = targetFrame.at<cv::Vec3b>(y, x);
     const uint8_t R = bgr[2], G = bgr[1], B = bgr[0];
-    for (const auto& seg : G_SHELVES[idx]) {
+
+    auto& shelvesVec = G_SHELVES[idx];
+    const bool isRight = (shelfNo >= 1 && shelfNo <= 24);
+    std::vector<uint8_t>& buf = isRight ? rightRgb : leftRgb;
+    const int totalLeds = isRight ? rightLeds : leftLeds;
+
+    for (const auto& seg : shelvesVec) {
       for (int i = 0; i < seg.count; ++i) {
         const int led = seg.startIndex + i;
         if (led < 0 || led >= totalLeds) continue;
         const int o = led * 3;
-        rgb[o + 0] = R; rgb[o + 1] = G; rgb[o + 2] = B;
+        buf[o + 0] = R; buf[o + 1] = G; buf[o + 2] = B;
       }
     }
   }
@@ -978,7 +1032,7 @@ static bool sendDDP(const std::vector<uint8_t>& rgb)
 }
 */
 
-static bool sendDDP(const std::vector<uint8_t>& rgb)
+static bool sendDDP(const char* host, uint16_t port, const std::vector<uint8_t>& rgb)
 {
     if (rgb.empty())
         return true; // nothing to send is "success"
@@ -991,10 +1045,10 @@ static bool sendDDP(const std::vector<uint8_t>& rgb)
 
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
-    addr.sin_port   = htons(DDP_PORT);
+    addr.sin_port   = htons(port);
 
     // Prefer inet_pton over inet_addr (inet_addr is deprecated and returns -1 on error)
-    if (::inet_pton(AF_INET, DDP_HOST, &addr.sin_addr) != 1) {
+    if (::inet_pton(AF_INET, host, &addr.sin_addr) != 1) {
         ::close(sockfd);
         return false;
     }
@@ -1086,29 +1140,33 @@ void AmbiPi::sendFrameToGameWall(const cv::Mat& resized6x4BGR)
 */
 void AmbiPi::sendFrameToGameWall(const cv::Mat& resized6x4BGR)
 {
-    // Build raw LED buffer for this frame
-    std::vector<uint8_t> current;
-    buildLedBufferFromFrame(resized6x4BGR, current);
+    // Build raw LED buffers for this frame (per board)
+    std::vector<uint8_t> rightCurr, leftCurr;
+    buildLedBuffersFromFrame(resized6x4BGR, rightCurr, leftCurr);
 
-    // Allocate lastFrame_ on first call
-    if (lastFrame_.size() != current.size()) {
-        lastFrame_ = current; // no smoothing on first frame
+    // Allocate/resize last frames once to match sizes
+    if (lastFrame_.size() != rightCurr.size() + leftCurr.size()) {
+        lastFrame_.assign(rightCurr.size() + leftCurr.size(), 0);
     }
 
-    // Blend: out = last*alpha + current*(1-alpha)
-    // constexpr float alpha = 0.7f; // weight for previous frame
-    for (size_t i = 0; i < current.size(); ++i) {
-        float blended = lastFrame_[i] * _alpha + current[i] * (1.0f - _alpha);
-        current[i] = static_cast<uint8_t>(std::lround(blended));
-    }
+    // Blend each buffer against its own slice in lastFrame_
+    // Layout lastFrame_ = [ right | left ]
+    auto blendInto = [this](std::vector<uint8_t>& curr, size_t base, const std::vector<uint8_t>& prevAll){
+        for (size_t i = 0; i < curr.size(); ++i) {
+            float blended = prevAll[base + i] * _alpha + curr[i] * (1.0f - _alpha);
+            curr[i] = static_cast<uint8_t>(std::lround(blended));
+        }
+    };
+    blendInto(rightCurr, 0, lastFrame_);
+    blendInto(leftCurr,  rightCurr.size(), lastFrame_);
 
     // Update history
-    lastFrame_ = current;
+    lastFrame_.assign(rightCurr.begin(), rightCurr.end());
+    lastFrame_.insert(lastFrame_.end(), leftCurr.begin(), leftCurr.end());
 
-    // Send via DDP
-    if (!sendDDP(current)) {
-        // handle error (log, retry, etc.)
-    }
+    // Send via DDP to each board
+    if (!rightCurr.empty()) (void)sendDDP(DDP_HOST_RIGHT, DDP_PORT, rightCurr);
+    if (!leftCurr.empty())  (void)sendDDP(DDP_HOST_LEFT,  DDP_PORT, leftCurr);
 }
 
 
