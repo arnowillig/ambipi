@@ -858,19 +858,38 @@ cv::Mat AmbiPi::cropBorders(cv::Mat frame, bool debug) const
 
 void AmbiPi::calculateDisplayFrameFromFrame(cv::Mat frame)
 {
-    int w = frame.cols;
-    int h = frame.rows;
-    int side = std::min(w, h);
-    int x = (w - side) / 2;
-    int y = (h - side) / 2;
+    // Horizontal correction factor (stretch); 1.0 = off.
+    // Increase if the input looks horizontally compressed.
+    // Tweak this value to your setup (e.g. 1.10 .. 1.40).
+    constexpr double kXFix = 1.20;
 
-    int interpolation = cv::INTER_LANCZOS4;
+    // 1) Optional horizontal stretch
+    const int w = frame.cols;
+    const int h = frame.rows;
+    cv::Mat stretched;
 
-    cv::Mat squareFrame;
-    cv::resize(frame(cv::Rect(x, y, side, side)), squareFrame, cv::Size(32, 32), 0, 0, interpolation);
+    if (std::abs(kXFix - 1.0) < 1e-6) {
+        stretched = frame;
+    } else {
+        const int newW = std::max(1, static_cast<int>(std::lround(w * kXFix)));
+        cv::resize(frame, stretched, cv::Size(newW, h), 0, 0, cv::INTER_LANCZOS4);
+    }
+
+    // 2) Center-crop to square from the stretched image
+    const int sw = stretched.cols;
+    const int sh = stretched.rows;
+    const int side = std::min(sw, sh);
+    const int x = (sw - side) / 2;
+    const int y = (sh - side) / 2;
+
+    cv::Mat squareFrame = stretched(cv::Rect(x, y, side, side));
+
+    // 3) Downscale to 32×32 and send (RGB order)
+    cv::Mat out32;
+    cv::resize(squareFrame, out32, cv::Size(32, 32), 0, 0, cv::INTER_LANCZOS4);
 
     cv::Mat rgbFrame;
-    cv::cvtColor(squareFrame, rgbFrame, cv::COLOR_BGR2RGB);
+    cv::cvtColor(out32, rgbFrame, cv::COLOR_BGR2RGB);
     sendFullFrame(rgbFrame);
 }
 
