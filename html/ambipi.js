@@ -31,6 +31,8 @@ const displayToggle = document.getElementById("displayToggle");
 const tableToggle = document.getElementById("tableToggle");
 const displayState = document.getElementById("displayState");
 const tableState = document.getElementById("tableState");
+const gamewallToggle = document.getElementById("gamewallToggle");
+const gamewallState = document.getElementById("gamewallState");
 
 // Apply stored or system theme preference
 let dark = (() => {
@@ -234,6 +236,20 @@ async function fetchTableState() {
   }
 }
 
+async function fetchGamewallState() {
+  try {
+    const res = await fetch("/api/gamewall");
+    if (!res.ok) throw new Error("bad");
+    const raw = await res.text();
+    const val = raw.trim();
+    const on = val === "true";
+    gamewallToggle.checked = on;
+    gamewallState.textContent = on ? "On" : "Off";
+  } catch (e) {
+    gamewallState.textContent = "Error";
+  }
+}
+
 // Toggle handlers
 displayToggle.addEventListener("change", () => {
   const target = displayToggle.checked ? "1" : "0";
@@ -251,11 +267,20 @@ tableToggle.addEventListener("change", () => {
       tableState.textContent = "Error";
     });
 });
+gamewallToggle.addEventListener("change", () => {
+  const target = gamewallToggle.checked ? "1" : "0";
+  fetch(`/api/gamewall/${target}`)
+    .then(() => fetchGamewallState())
+    .catch(() => {
+      gamewallState.textContent = "Error";
+    });
+});
 
 // Periodically resync display/table state in case something else changed them
 setInterval(() => {
   fetchDisplayState();
   fetchTableState();
+  fetchGamewallState();
 }, 5000);
 
 // Kick off auto-refresh and initial state sync
@@ -263,3 +288,4 @@ startAutoRefresh();
 updateImage(true);
 fetchDisplayState();
 fetchTableState();
+fetchGamewallState();

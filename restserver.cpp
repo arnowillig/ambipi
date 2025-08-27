@@ -13,6 +13,8 @@ RESTServer::RESTServer(AmbiPi* ambiPi) : _ambiPi(ambiPi)
 	
 	Rest::Routes::Get(_router, "/api/display/:enabled",	Rest::Routes::bind(&RESTServer::setDisplay, this));
 	Rest::Routes::Get(_router, "/api/table/:enabled",	Rest::Routes::bind(&RESTServer::setGamingTable, this));
+	Rest::Routes::Get(_router, "/api/gamewall/:enabled", Rest::Routes::bind(&RESTServer::setGameWallAmbilight, this));
+	Rest::Routes::Get(_router, "/api/gamewall",        Rest::Routes::bind(&RESTServer::getGameWallAmbilight, this));
 
 	Rest::Routes::Get(_router, "/api/display",		Rest::Routes::bind(&RESTServer::getDisplay, this));
 	Rest::Routes::Get(_router, "/api/table",		Rest::Routes::bind(&RESTServer::getGamingTable, this));
@@ -302,6 +304,21 @@ void RESTServer::getMode(const Rest::Request& request, Http::ResponseWriter resp
 	}
 	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, mode + "\n");
+}
+
+void RESTServer::setGameWallAmbilight(const Rest::Request &request, Http::ResponseWriter response)
+{
+	bool enabled = request.param(":enabled").as<bool>();
+	std::string resp = enabled ? "true\n" : "false\n";
+	response.send(Http::Code::Ok, resp);
+	_ambiPi->setEnableGameWallAmbilight(enabled);
+}
+
+void RESTServer::getGameWallAmbilight(const Rest::Request &request, Http::ResponseWriter response)
+{
+	(void) request;
+	std::string resp = _ambiPi->getEnableGameWallAmbilight() ? "true\n" : "false\n";
+	response.send(Http::Code::Ok, resp);
 }
 
 void RESTServer::setDisplay(const Rest::Request &request, Http::ResponseWriter response)

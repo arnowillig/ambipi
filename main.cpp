@@ -194,6 +194,8 @@ int main(int argc, char *argv[])
 					ambiPi.calculateAmbilightFromFrame(frame);
 					if (ambiPi.getEnableDisplayVideo()) {
 						ambiPi.calculateDisplayFrameFromFrame(frame);
+					}
+					if (ambiPi.getEnableGameWallAmbilight()) {
 						ambiPi.calculateGameWallFrameFromFrame(frame);
 					}
 					sleep = 10;

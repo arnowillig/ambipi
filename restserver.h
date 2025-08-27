@@ -40,6 +40,8 @@ public:
 	void setGamingTable(const Rest::Request &request, Http::ResponseWriter response);
 	void getDisplay(const Rest::Request &request, Http::ResponseWriter response);
 	void getGamingTable(const Rest::Request &request, Http::ResponseWriter response);
+	void setGameWallAmbilight(const Rest::Request &request, Http::ResponseWriter response);
+	void getGameWallAmbilight(const Rest::Request &request, Http::ResponseWriter response);
 
 };
 
