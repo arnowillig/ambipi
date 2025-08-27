@@ -861,7 +861,7 @@ void AmbiPi::calculateDisplayFrameFromFrame(cv::Mat frame)
     // Horizontal correction factor (stretch); 1.0 = off.
     // Increase if the input looks horizontally compressed.
     // Tweak this value to your setup (e.g. 1.10 .. 1.40).
-    constexpr double kXFix = 1.20;
+    constexpr double kXFix = 1.30;
 
     // 1) Optional horizontal stretch
     const int w = frame.cols;
