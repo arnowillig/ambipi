@@ -34,3 +34,5 @@
 *.user
 ambipi
 gamewall/build
+
+gamewall/.vscode/settings.json
