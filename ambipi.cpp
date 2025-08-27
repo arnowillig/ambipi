@@ -7,7 +7,9 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+
 #include "rpi_ws281x/ws2811.h"
+#include <nlohmann/json.hpp>
 
 
 // 30 leds/meter
@@ -44,66 +46,41 @@ static constexpr size_t  DDP_HEADER_LEN     = 10;
 struct Segment { int startIndex; int count; };
 using Shelf = std::vector<Segment>;
 
+// --- Dynamic shelves loaded from JSON ---
+static std::vector<Shelf> G_SHELVES; // first 32 shelves
+static bool G_LOADED = false;
 
-// Segments Order: Left Right, Top, Bottom
-static const std::array<Shelf,24> SHELVES = {{
-  // "1" 
-  Shelf{ { {  97,12 }, {   0,13 }, { 109,8 }, {   0,0 } } },
-  // "2"
-  Shelf{ { {  84,13 }, {  13,13 }, {   0,0 }, {   0,0 } } },
-  // "3"
-  Shelf{ { {  71,13 }, {  26,13 }, {   0,0 }, {   0,0 } } },
-  // "4"
-  Shelf{ { {  59,12 }, {  39,12 }, {   0,0 }, {  51,8 } } },
-
-  // "5"
-  Shelf{ { {117,12 }, { 214,12 }, { 226,8 }, {  0,0 } } },
-  // "6"
-  Shelf{ { {130,13 }, { 201,13 }, {  0,0 }, {  0,0 } } },
-  // "7"
-  Shelf{ { {143,13 }, { 188,13 }, {  0,0 }, {  0,0 } } },
-  // "8"
-  Shelf{ { {156,12 }, { 176,12 }, {  0,0 }, { 164,8 } } },
-
-  // "9"
-  Shelf{ { { 331,12 }, { 234,13 }, { 343,8 }, {  0,0 } } },
-  // "10"
-  Shelf{ { { 318,13 }, { 247,13 }, {  0,0 }, {  0,0 } } },
-  // "11"
-  Shelf{ { { 305,13 }, { 260,13 }, {  0,0 }, {  0,0 } } },
-  // "12"
-  Shelf{ { { 293,12 }, { 273,12 }, {  0,0 }, { 285, 8 } } },
-
-  // "1" 
-  Shelf{ { {  97+351,12 }, {   0+351,13 }, { 109+351,8 }, {   0,0 } } },
-  // "2"
-  Shelf{ { {  84+351,13 }, {  13+351,13 }, {   0,0 }, {   0,0 } } },
-  // "3"
-  Shelf{ { {  71+351,13 }, {  26+351,13 }, {   0,0 }, {   0,0 } } },
-  // "4"
-  Shelf{ { {  59+351,12 }, {  39+351,12 }, {   0,0 }, {  51+351,8 } } },
-
-  // "5"
-  Shelf{ { {117+351,12 }, { 214+351,12 }, { 226+351,8 }, {  0,0 } } },
-  // "6"
-  Shelf{ { {130+351,13 }, { 201+351,13 }, {  0,0 }, {  0,0 } } },
-  // "7"
-  Shelf{ { {143+351,13 }, { 188+351,13 }, {  0,0 }, {  0,0 } } },
-  // "8"
-  Shelf{ { {156+351,12 }, { 176+351,12 }, {  0,0 }, { 164+351,8 } } },
-
-  // "9"
-  Shelf{ { { 331+351,12 }, { 234+351,13 }, { 343+351,8 }, {  0,0 } } },
-  // "10"
-  Shelf{ { { 318+351,13 }, { 247+351,13 }, {  0,0 }, {  0,0 } } },
-  // "11"
-  Shelf{ { { 305+351,13 }, { 260+351,13 }, {  0,0 }, {  0,0 } } },
-  // "12"
-  Shelf{ { { 293+351,12 }, { 273+351,12 }, {  0,0 }, { 285+351, 8 } } }
-
-
-
-}};
+static bool loadShelvesFromJson()
+{
+    if (G_LOADED) return true;
+    const char* path = "/home/pi/src/ambipi/gamewall/public/shelves.json";
+    std::ifstream ifs(path);
+    if (!ifs) { std::cerr << "[ERROR] Cannot open shelves.json: " << path << "\n"; return false; }
+    try {
+        nlohmann::json j; ifs >> j;
+        if (!j.is_array()) { std::cerr << "[ERROR] shelves.json is not an array\n"; return false; }
+        G_SHELVES.clear();
+        size_t take = std::min<size_t>(32, j.size());
+        G_SHELVES.reserve(take);
+        for (size_t i = 0; i < take; ++i) {
+            const auto& item = j[i];
+            Shelf s;
+            if (item.contains("segments") && item["segments"].is_array()) {
+                for (const auto& seg : item["segments"]) {
+                    if (!seg.contains("startIndex") || !seg.contains("count")) continue;
+                    Segment sg{ seg["startIndex"].get<int>(), seg["count"].get<int>() };
+                    if (sg.count > 0) s.push_back(sg);
+                }
+            }
+            G_SHELVES.push_back(std::move(s));
+        }
+        G_LOADED = true;
+        std::cerr << "[INFO] Loaded " << G_SHELVES.size() << " shelves from JSON" << "\n";
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "[ERROR] shelves.json parse error: " << e.what() << "\n"; return false;
+    }
+}
 
 
 
@@ -888,56 +865,66 @@ void AmbiPi::calculateDisplayFrameFromFrame(cv::Mat frame)
 	sendFullFrame(rgbFrame);
 }
 
-// Compute total LEDs we need to cover based on shelves 1..12
+// Compute total LEDs we need to cover based on loaded shelves
 static int computeStripLen()
 {
-// return 351;
+  if (!G_LOADED) loadShelvesFromJson();
   int maxIdx = 0;
-  for (const auto& shelf : SHELVES) {
+  for (const auto& shelf : G_SHELVES) {
     for (const auto& seg : shelf) {
       maxIdx = std::max(maxIdx, seg.startIndex + seg.count);
     }
   }
-  return maxIdx; // total LEDs = highest index used
+  return maxIdx;
 }
 
-// Map shelf number (1..12) to (x,y) in 6x4 where 1 is top-right,
-// 2 under it, 3 under that, 4 under that, 5 left next to 1, etc.
-static inline void shelfToXY(int shelf, int& x, int& y)
+// Map shelf number (1..32) to (x,y) in 10x4 grid: 1..24 right 6x4 (x=4..9), 25..32 in left 4x4 L grid (x=0..3)
+static inline void shelfToXY32(int shelf, int& x, int& y)
 {
-  // shelves per column = 4 (height)
-  const int colFromRight = (shelf - 1) / 4;   // 0 for shelves 1..4, 1 for 5..8, 2 for 9..12
-  const int rowFromTop   = (shelf - 1) % 4;   // 0..3
-  x = 5 - colFromRight; // 6-wide grid => columns 5,4,3 for shelves 1..12
-  y = rowFromTop;       // top to bottom
+  // Right board (1..24): 6 columns (rightmost is shelf 1..4), 4 rows; grid X = 4..9
+  if (shelf >= 1 && shelf <= 24) {
+    const int colFromRight = (shelf - 1) / 4;   // 0 for 1..4, 1 for 5..8, ..., 5 for 21..24
+    const int rowFromTop   = (shelf - 1) % 4;   // 0..3
+    x = 9 - colFromRight; // columns 9..4
+    y = rowFromTop;       // rows 0..3
+    return;
+  }
+  // Left board (25..32): L-formed 4×4 per layout:
+  // Row0: -- -- 29 25
+  // Row1: -- -- 30 26
+  // Row2: 35 33 31 27
+  // Row3: 36 34 32 28
+  static const std::unordered_map<int, std::pair<int,int>> L_POS = {
+    {29,{2,0}},{25,{3,0}},
+    {30,{2,1}},{26,{3,1}},
+    {35,{0,2}},{33,{1,2}},{31,{2,2}},{27,{3,2}},
+    {36,{0,3}},{34,{1,3}},{32,{2,3}},{28,{3,3}}
+  };
+  auto it = L_POS.find(shelf);
+  if (it != L_POS.end()) { x = it->second.first; y = it->second.second; return; }
+  // Fallback: clamp inside left grid
+  x = 0; y = 0;
 }
 
-// Fill the LED buffer (RGB order) from the 6x4 targetFrame using shelves 1..12 mapping.
+// Fill the LED buffer (RGB order) from the 10x4 targetFrame using shelves 1..32 mapping.
 static void buildLedBufferFromFrame(const cv::Mat& targetFrame, std::vector<uint8_t>& rgb)
 {
-  // targetFrame is 6x4, type CV_8UC3, BGR in OpenCV
+  if (!G_LOADED) loadShelvesFromJson();
   const int totalLeds = computeStripLen();
-  rgb.assign(totalLeds * 3, 0); // zero out unassigned LEDs
+  rgb.assign(std::max(0, totalLeds) * 3, 0);
 
-  for (int shelfIdx = 0; shelfIdx < 24; ++shelfIdx) {
-    int x, y;
-    shelfToXY(shelfIdx + 1, x, y);
-
-    // Bounds safety
+  const int useShelves = static_cast<int>(std::min<size_t>(G_SHELVES.size(), 32));
+  for (int idx = 0; idx < useShelves; ++idx) {
+    int x, y; shelfToXY32(idx + 1, x, y);
     if (x < 0 || x >= targetFrame.cols || y < 0 || y >= targetFrame.rows) continue;
-
     const cv::Vec3b bgr = targetFrame.at<cv::Vec3b>(y, x);
     const uint8_t R = bgr[2], G = bgr[1], B = bgr[0];
-
-    for (const auto& seg : SHELVES[shelfIdx]) {
+    for (const auto& seg : G_SHELVES[idx]) {
       for (int i = 0; i < seg.count; ++i) {
         const int led = seg.startIndex + i;
-        if (led < 0) continue;
-        if (led >= totalLeds) break;
+        if (led < 0 || led >= totalLeds) continue;
         const int o = led * 3;
-        rgb[o + 0] = R;
-        rgb[o + 1] = G;
-        rgb[o + 2] = B;
+        rgb[o + 0] = R; rgb[o + 1] = G; rgb[o + 2] = B;
       }
     }
   }
@@ -1133,7 +1120,7 @@ void AmbiPi::calculateGameWallFrameFromFrame(cv::Mat frame)
 	int interpolation = cv::INTER_AREA; // cv::INTER_LANCZOS4; // INTER_CUBIC
 
 	cv::Mat targetFrame;
-	cv::resize(frame, targetFrame, cv::Size(6, 4), 0, 0, interpolation);
+	cv::resize(frame, targetFrame, cv::Size(10, 4), 0, 0, interpolation);
 
 	sendFrameToGameWall(targetFrame);
 }
