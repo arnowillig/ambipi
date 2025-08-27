@@ -1,44 +1,41 @@
 [
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 585, "count": 13 }, { "startIndex": 682, "count": 20 } ] },   // 21
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 468, "count": 13 }, { "startIndex": 565, "count": 20 } ] },   // 17
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 351, "count": 13 }, { "startIndex": 448, "count": 20 } ] },   // 13
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 234, "count": 13 }, { "startIndex": 331, "count": 20 } ] },   // 9
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 117, "count": 13 }, { "startIndex": 214, "count": 20 } ] },   // 5
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex":   0, "count": 13 }, { "startIndex":  97, "count": 20 } ] },   // 1
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex":   0, "count": 13 }, { "startIndex":  97, "count": 20 } ] },
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex":  13, "count": 13 }, { "startIndex":  84, "count": 13 } ] },
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex":  26, "count": 13 }, { "startIndex":  71, "count": 13 } ] },
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex":  39, "count": 32 } ] },
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 117, "count": 13 }, { "startIndex": 214, "count": 20 } ] },
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 130, "count": 13 }, { "startIndex": 201, "count": 13 } ] },
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 143, "count": 13 }, { "startIndex": 188, "count": 13 } ] },
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 156, "count": 32 } ] },
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 234, "count": 13 }, { "startIndex": 331, "count": 20 } ] },
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 247, "count": 13 }, { "startIndex": 318, "count": 13 } ] },
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 260, "count": 13 }, { "startIndex": 305, "count": 13 } ] },
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 273, "count": 32 } ] },
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 351, "count": 13 }, { "startIndex": 448, "count": 20 } ] },
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 364, "count": 13 }, { "startIndex": 435, "count": 13 } ] },
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 377, "count": 13 }, { "startIndex": 422, "count": 13 } ] },
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 390, "count": 32 } ] },
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 468, "count": 13 }, { "startIndex": 565, "count": 20 } ] },
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 481, "count": 13 }, { "startIndex": 552, "count": 13 } ] },
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 494, "count": 13 }, { "startIndex": 539, "count": 13 } ] },
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 507, "count": 32 } ] },
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 585, "count": 13 }, { "startIndex": 682, "count": 20 } ] },
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 598, "count": 13 }, { "startIndex": 669, "count": 13 } ] },
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 611, "count": 13 }, { "startIndex": 656, "count": 13 } ] },
+  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 624, "count": 32 } ] },
+  
+  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex":  46, "count": 34 } ] },
+  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex":  33, "count": 14 }, { "startIndex":  79, "count": 14 } ] },
+  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex":  20, "count": 14 }, { "startIndex":  92, "count": 14 } ] },
+  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex":   0, "count": 20 }, { "startIndex":  106, "count": 12 } ] },
+  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex":  165, "count": 32 } ] },
+  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex":  151, "count": 14 }, { "startIndex":  197, "count": 14 } ] },
+  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex":  138, "count": 14 }, { "startIndex":  210, "count": 14 } ] },
+  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex":  118, "count": 21 }, { "startIndex":  224, "count": 12 } ] },
 
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 598, "count": 13 }, { "startIndex": 669, "count": 13 } ] },   // 22
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 481, "count": 13 }, { "startIndex": 552, "count": 13 } ] },   // 18
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 364, "count": 13 }, { "startIndex": 435, "count": 13 } ] },   // 14
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 247, "count": 13 }, { "startIndex": 318, "count": 13 } ] },   // 10
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 130, "count": 13 }, { "startIndex": 201, "count": 13 } ] },   // 6
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex":  13, "count": 13 }, { "startIndex":  84, "count": 13 } ] },   // 2
-
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 611, "count": 13 }, { "startIndex": 656, "count": 13 } ] },   // 23
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 494, "count": 13 }, { "startIndex": 539, "count": 13 } ] },   // 19
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 377, "count": 13 }, { "startIndex": 422, "count": 13 } ] },   // 15
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 260, "count": 13 }, { "startIndex": 305, "count": 13 } ] },   // 11
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 143, "count": 13 }, { "startIndex": 188, "count": 13 } ] },   // 7
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex":  26, "count": 13 }, { "startIndex":  71, "count": 13 } ] },   // 3
-
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 624, "count": 32 } ] },   // 24
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 507, "count": 32 } ] },   // 20
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 390, "count": 32 } ] },   // 16
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 273, "count": 32 } ] },   // 12
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex": 156, "count": 32 } ] },   // 8
-  { "host": "192.168.178.146", "port": "21324", "segments": [ { "startIndex":  39, "count": 32 } ] },   // 4
-
-  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex":  33, "count": 14 }, { "startIndex":  79, "count": 14 } ] },   // 29
-  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex":   0, "count": 20 }, { "startIndex": 106, "count": 12 } ] },   // 25
-  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex":  20, "count": 14 }, { "startIndex":  92, "count": 14 } ] },   // 30
-  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex": 118, "count": 21 }, { "startIndex": 224, "count": 12 } ] },   // 26
-
-  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex": 255, "count": 30 } ] },   // 35
-  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex": 236, "count": 19 }, { "startIndex": 286, "count": 10 } ] },   // 33
-  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex": 315, "count": 30 } ] },   // 31
-  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex": 296, "count": 19 }, { "startIndex": 346, "count": 10 } ] },   // 27
-
-  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex": 165, "count": 32 } ] },   // 36
-  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex": 151, "count": 14 }, { "startIndex": 197, "count": 14 } ] },   // 34
-  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex": 138, "count": 14 }, { "startIndex": 210, "count": 14 } ] },   // 32
-  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex":  46, "count": 34 } ] }    // 28
+  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex":  255, "count": 30 } ] },
+  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex":  236, "count": 19 }, { "startIndex":  286, "count": 10 } ] },
+  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex":  315, "count": 30 } ] },
+  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex":  296, "count": 19 }, { "startIndex":  346, "count": 10 } ] }
+  
 ]
