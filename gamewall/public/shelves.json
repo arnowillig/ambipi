@@ -34,6 +34,8 @@
   { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex":  118, "count": 21 }, { "startIndex":  224, "count": 12 } ] },
 
   { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex":  255, "count": 30 } ] },
-  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex":  236, "count": 19 }, { "startIndex":  286, "count": 10 } ] }
+  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex":  236, "count": 19 }, { "startIndex":  286, "count": 10 } ] },
+  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex":  315, "count": 30 } ] },
+  { "host": "192.168.178.185", "port": "21324", "segments": [ { "startIndex":  296, "count": 19 }, { "startIndex":  346, "count": 10 } ] }
   
 ]
