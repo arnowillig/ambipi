@@ -93,13 +93,17 @@
          35 33 31 27
          36 34 32 28
     -->
-    <div class="grid4">
+    <div class="grid6">
       <!-- Row 1 -->
+      <div class="empty" aria-hidden="true"></div>
+      <div class="empty" aria-hidden="true"></div>
       <div class="empty" aria-hidden="true"></div>
       <div class="empty" aria-hidden="true"></div>
       <div class="shelf"><button data-shelf="25" aria-label="Apply to shelf 25">Shelf 25</button></div>
       <div class="shelf"><button data-shelf="26" aria-label="Apply to shelf 26">Shelf 26</button></div>
       <!-- Row 2 -->
+      <div class="empty" aria-hidden="true"></div>
+      <div class="empty" aria-hidden="true"></div>
       <div class="empty" aria-hidden="true"></div>
       <div class="empty" aria-hidden="true"></div>
       <div class="shelf"><button data-shelf="27" aria-label="Apply to shelf 27">Shelf 27</button></div>
@@ -109,11 +113,15 @@
       <div class="shelf"><button data-shelf="30" aria-label="Apply to shelf 30">Shelf 30</button></div>
       <div class="shelf"><button data-shelf="31" aria-label="Apply to shelf 31">Shelf 31</button></div>
       <div class="shelf"><button data-shelf="32" aria-label="Apply to shelf 32">Shelf 32</button></div>
-      <!-- Row 4 -->
       <div class="shelf"><button data-shelf="33" aria-label="Apply to shelf 33">Shelf 33</button></div>
       <div class="shelf"><button data-shelf="34" aria-label="Apply to shelf 34">Shelf 34</button></div>
+      <!-- Row 4 -->
       <div class="shelf"><button data-shelf="35" aria-label="Apply to shelf 35">Shelf 35</button></div>
       <div class="shelf"><button data-shelf="36" aria-label="Apply to shelf 36">Shelf 36</button></div>
+      <div class="shelf"><button data-shelf="37" aria-label="Apply to shelf 37">Shelf 37</button></div>
+      <div class="shelf"><button data-shelf="38" aria-label="Apply to shelf 38">Shelf 38</button></div>
+      <div class="shelf"><button data-shelf="39" aria-label="Apply to shelf 39">Shelf 39</button></div>
+      <div class="shelf"><button data-shelf="40" aria-label="Apply to shelf 40">Shelf 40</button></div>
     </div>
   </section>
 </main>
@@ -167,7 +175,8 @@ document.querySelectorAll('button[data-shelf]').forEach(btn => {
 document.getElementById('all').addEventListener('click', async () => {
   const color = pickColor();
   const order = [
-  1,2,3,4,5,6,12,18,24,23,22,21,20,19,13,7,8,9,10,11,17,16,15,14, 25,27,31,30,29,33,34,35,36]; //.reverse();
+  1,2,3,4,5,6,12,18,24,23,22,21,20,19,13,7,8,9,10,11,17,16,15,14,
+  25,26,28,27,33,34,40,39,38,32,31,37,36,30,29,35];
   statusEl.classList.remove('error');
   statusEl.textContent = 'Sending to all shelves (1–24)...';
   try {
