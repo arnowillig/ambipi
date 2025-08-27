@@ -858,17 +858,20 @@ cv::Mat AmbiPi::cropBorders(cv::Mat frame, bool debug) const
 
 void AmbiPi::calculateDisplayFrameFromFrame(cv::Mat frame)
 {
-	int w = frame.cols;
-	int h = frame.rows;
+    int w = frame.cols;
+    int h = frame.rows;
+    int side = std::min(w, h);
+    int x = (w - side) / 2;
+    int y = (h - side) / 2;
 
-	int interpolation = cv::INTER_LANCZOS4; // INTER_CUBIC
+    int interpolation = cv::INTER_LANCZOS4;
 
-	cv::Mat squareFrame;
-	cv::resize(frame(cv::Rect((w-h)/2,0, h, h)), squareFrame, cv::Size(32, 32), 0, 0, interpolation);
+    cv::Mat squareFrame;
+    cv::resize(frame(cv::Rect(x, y, side, side)), squareFrame, cv::Size(32, 32), 0, 0, interpolation);
 
-	cv::Mat rgbFrame;
-	cv::cvtColor(squareFrame, rgbFrame, cv::COLOR_BGR2RGB);
-	sendFullFrame(rgbFrame);
+    cv::Mat rgbFrame;
+    cv::cvtColor(squareFrame, rgbFrame, cv::COLOR_BGR2RGB);
+    sendFullFrame(rgbFrame);
 }
 
 // Compute total LEDs we need to cover based on loaded shelves
