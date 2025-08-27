@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Gamewall Shelves (6×4 = 24)</title>
+  <title>Gamewall Shelves (24 + 12 = 36)</title>
   <style>
-    /* Minimal, mobile-safe, ALWAYS 6 columns */
+    /* Minimal, mobile-safe */
     :root{--bg:#0f1117;--fg:#eaeefb;--muted:#9aa4b2;--card:#151824;--accent:#4f46e5;}
     html,body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,"Noto Sans",sans-serif;}
     header{padding:16px 20px;display:flex;gap:16px;align-items:center;background:#0b0d13;border-bottom:1px solid #1e2230;}
@@ -18,19 +18,11 @@
     .status{margin-top:8px;min-height:22px;font-size:13px;color:#9ee493;}
     .error{color:#ff6b6b;}
     a{color:#8ab4ff;text-decoration:none;margin-left:auto}
-
-    /* 🔒 Force exactly 6 columns at all widths */
-    .grid6{
-      display:grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr)) !important; /* force six columns */
-      gap:14px;
-    }
-
-    .shelf{
-      display:flex;align-items:center;justify-content:center;gap:12px;
-      padding:12px;border-radius:14px;border:1px solid #23283b;background:#0d0f16;
-      min-height:64px;
-    }
+    /* Grids */
+    .grid6{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;}
+    .grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;}
+    .shelf{display:flex;align-items:center;justify-content:center;gap:12px;padding:12px;border-radius:14px;border:1px solid #23283b;background:#0d0f16;min-height:64px;}
+    .empty{min-height:64px;border-radius:14px;border:1px dashed #23283b;opacity:.35;}
   </style>
 </head>
 <body>
@@ -40,18 +32,19 @@
 </header>
 
 <main>
+  <!-- Global controls -->
   <section class="card">
     <div class="row">
       <label for="color" style="color:var(--muted);font-size:14px;">Color</label>
       <input id="color" type="color" value="#ff0000" aria-label="Color picker">
-      <button id="all">Apply to All</button>
+      <button id="all">Apply to all</button>
     </div>
     <div id="status" class="status"></div>
   </section>
 
+  <!-- Block 1: 6×4 = 24 -->
   <section class="card">
-    <h3 style="margin:4px 0 12px 0;">Select a shelf</h3>
-
+    <h3 style="margin:4px 0 12px 0;">Select a shelf (Right board)</h3>
     <!-- EXACT order, 6 columns × 4 rows:
          Col1 (left):  21,22,23,24
          Col2:         17,18,19,20
@@ -68,7 +61,6 @@
       <div class="shelf"><button data-shelf="9"  aria-label="Apply to shelf 9">Shelf 9</button></div>
       <div class="shelf"><button data-shelf="5"  aria-label="Apply to shelf 5">Shelf 5</button></div>
       <div class="shelf"><button data-shelf="1"  aria-label="Apply to shelf 1">Shelf 1</button></div>
-
       <!-- Row 2 -->
       <div class="shelf"><button data-shelf="22" aria-label="Apply to shelf 22">Shelf 22</button></div>
       <div class="shelf"><button data-shelf="18" aria-label="Apply to shelf 18">Shelf 18</button></div>
@@ -76,7 +68,6 @@
       <div class="shelf"><button data-shelf="10" aria-label="Apply to shelf 10">Shelf 10</button></div>
       <div class="shelf"><button data-shelf="6"  aria-label="Apply to shelf 6">Shelf 6</button></div>
       <div class="shelf"><button data-shelf="2"  aria-label="Apply to shelf 2">Shelf 2</button></div>
-
       <!-- Row 3 -->
       <div class="shelf"><button data-shelf="23" aria-label="Apply to shelf 23">Shelf 23</button></div>
       <div class="shelf"><button data-shelf="19" aria-label="Apply to shelf 19">Shelf 19</button></div>
@@ -84,7 +75,6 @@
       <div class="shelf"><button data-shelf="11" aria-label="Apply to shelf 11">Shelf 11</button></div>
       <div class="shelf"><button data-shelf="7"  aria-label="Apply to shelf 7">Shelf 7</button></div>
       <div class="shelf"><button data-shelf="3"  aria-label="Apply to shelf 3">Shelf 3</button></div>
-
       <!-- Row 4 -->
       <div class="shelf"><button data-shelf="24" aria-label="Apply to shelf 24">Shelf 24</button></div>
       <div class="shelf"><button data-shelf="20" aria-label="Apply to shelf 20">Shelf 20</button></div>
@@ -93,7 +83,39 @@
       <div class="shelf"><button data-shelf="8"  aria-label="Apply to shelf 8">Shelf 8</button></div>
       <div class="shelf"><button data-shelf="4"  aria-label="Apply to shelf 4">Shelf 4</button></div>
     </div>
+  </section>
 
+  <!-- Block 2: L-formed 4×4 = 12 (25–36) -->
+  <section class="card">
+    <h3 style="margin:4px 0 12px 0;">Select a shelf (Left board)</h3>
+    <!-- Layout (4 cols × 4 rows):
+         -- -- 29 25
+         -- -- 30 26
+         35 33 31 27
+         36 34 32 28
+    -->
+    <div class="grid4">
+      <!-- Row 1 -->
+      <div class="empty" aria-hidden="true"></div>
+      <div class="empty" aria-hidden="true"></div>
+      <div class="shelf"><button data-shelf="29" aria-label="Apply to shelf 29">Shelf 29</button></div>
+      <div class="shelf"><button data-shelf="25" aria-label="Apply to shelf 25">Shelf 25</button></div>
+      <!-- Row 2 -->
+      <div class="empty" aria-hidden="true"></div>
+      <div class="empty" aria-hidden="true"></div>
+      <div class="shelf"><button data-shelf="30" aria-label="Apply to shelf 30">Shelf 30</button></div>
+      <div class="shelf"><button data-shelf="26" aria-label="Apply to shelf 26">Shelf 26</button></div>
+      <!-- Row 3 -->
+      <div class="shelf"><button data-shelf="35" aria-label="Apply to shelf 35">Shelf 35</button></div>
+      <div class="shelf"><button data-shelf="33" aria-label="Apply to shelf 33">Shelf 33</button></div>
+      <div class="shelf"><button data-shelf="31" aria-label="Apply to shelf 31">Shelf 31</button></div>
+      <div class="shelf"><button data-shelf="27" aria-label="Apply to shelf 27">Shelf 27</button></div>
+      <!-- Row 4 -->
+      <div class="shelf"><button data-shelf="36" aria-label="Apply to shelf 36">Shelf 36</button></div>
+      <div class="shelf"><button data-shelf="34" aria-label="Apply to shelf 34">Shelf 34</button></div>
+      <div class="shelf"><button data-shelf="32" aria-label="Apply to shelf 32">Shelf 32</button></div>
+      <div class="shelf"><button data-shelf="28" aria-label="Apply to shelf 28">Shelf 28</button></div>
+    </div>
   </section>
 </main>
 
@@ -101,9 +123,7 @@
 const statusEl = document.getElementById('status');
 const pickColor = () => document.getElementById('color').value.trim();
 
-/**
- * Apply color to a single shelf by index.
- */
+/** Apply color to a single shelf by index. */
 async function applyShelf(shelfIndex, color) {
   try {
     const res = await fetch('/api/v1/wled/shelf-color', {
@@ -112,9 +132,7 @@ async function applyShelf(shelfIndex, color) {
       body: JSON.stringify({ shelf: shelfIndex, color })
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || data.ok === false) {
-      throw new Error(data.error || res.statusText);
-    }
+    if (!res.ok || data.ok === false) throw new Error(data.error || res.statusText);
     return true;
   } catch (e) {
     console.error(`Shelf ${shelfIndex} failed:`, e);
@@ -122,10 +140,7 @@ async function applyShelf(shelfIndex, color) {
   }
 }
 
-/**
- * Apply color to multiple shelves via the bulk API (server does sequential sending).
- * The sending order matches the grid's row-wise left→right layout (6×4).
- */
+/** Apply color to multiple shelves via the bulk API (server does sequential sending). */
 async function applyShelvesBulk(shelves, color) {
   const res = await fetch('/api/v1/wled/shelves-color', {
     method: 'POST',
@@ -133,36 +148,39 @@ async function applyShelvesBulk(shelves, color) {
     body: JSON.stringify({ shelves, color, timeoutSeconds: 2 })
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.ok === false) {
-    throw new Error(data.error || res.statusText);
-  }
+  if (!res.ok || data.ok === false) throw new Error(data.error || res.statusText);
   return data;
 }
 
-// Hook up per-shelf buttons
+// Hook up per-shelf buttons (works for both blocks)
 document.querySelectorAll('button[data-shelf]').forEach(btn => {
   btn.addEventListener('click', async () => {
     const shelfNo = parseInt(btn.dataset.shelf, 10);
     statusEl.classList.remove('error');
     statusEl.textContent = `Sending to shelf ${shelfNo}...`;
     const ok = await applyShelf(shelfNo, pickColor());
-    statusEl.textContent = ok
-      ? `Shelf ${shelfNo} updated.`
-      : `Failed to update shelf ${shelfNo}.`;
+    statusEl.textContent = ok ? `Shelf ${shelfNo} updated.` : `Failed to update shelf ${shelfNo}.`;
     if (!ok) statusEl.classList.add('error');
   });
 });
 
-// "Apply to All" button
+// Apply to All (Block 1: 1–24). Order follows the first grid row-wise left→right.
 document.getElementById('all').addEventListener('click', async () => {
   const color = pickColor();
-  const order = [1,2,3,4,8,12,16,20,24,23,22,21,17,13,9,5,6,7,11,15,19,18,14,10];
-
+  const order = [
+  21,17,13, 9, 5, 1,
+  22,18,14,10, 6, 2,
+  23,19,15,11, 7, 3,
+  24,20,16,12, 8, 4, 
+        29,25,
+        30,26,
+  35,33,31,27,
+  36,34,32,28]; //.reverse();
   statusEl.classList.remove('error');
-  statusEl.textContent = 'Sending to all shelves...';
+  statusEl.textContent = 'Sending to all shelves (1–24)...';
   try {
     const r = await applyShelvesBulk(order, color);
-    statusEl.textContent = `Applied to ${r.applied} shelves.`;
+    statusEl.textContent = `Applied to ${r.applied} shelves (1–24).`;
   } catch (e) {
     statusEl.classList.add('error');
     statusEl.textContent = 'Error: ' + e.message;
