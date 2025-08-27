@@ -858,17 +858,23 @@ cv::Mat AmbiPi::cropBorders(cv::Mat frame, bool debug) const
 
 void AmbiPi::calculateDisplayFrameFromFrame(cv::Mat frame)
 {
-	int w = frame.cols;
-	int h = frame.rows;
+    int w = frame.cols;
+    int h = frame.rows;
+    int s = std::min(w, h);
+    int x0 = (w - s) / 2;
+    int y0 = (h - s) / 2;
 
-	int interpolation = cv::INTER_LANCZOS4; // INTER_CUBIC
+    int interpolation = cv::INTER_LANCZOS4; // or cv::INTER_AREA for downscale
+    cv::Mat squareFrame = frame(cv::Rect(x0, y0, s, s)).clone();
 
-	cv::Mat squareFrame;
-	cv::resize(frame(cv::Rect((w-h)/2,0, h, h)), squareFrame, cv::Size(32, 32), 0, 0, interpolation);
+    cv::Mat out32;
+    cv::resize(squareFrame, out32, cv::Size(32, 32), 0, 0, interpolation);
 
-	cv::Mat rgbFrame;
-	cv::cvtColor(squareFrame, rgbFrame, cv::COLOR_RGB2BGR);
-	sendFullFrame(rgbFrame);
+    // If sendFullFrame expects RGB, convert BGR->RGB. Otherwise, remove this.
+    cv::Mat rgbFrame;
+    cv::cvtColor(out32, rgbFrame, cv::COLOR_BGR2RGB);
+
+    sendFullFrame(rgbFrame);
 }
 
 // Compute total LEDs we need to cover based on loaded shelves
@@ -903,44 +909,50 @@ static const bool kMirrorRightY = false;  // flip top/bottom for shelves 1..24
 static const bool kMirrorLeftX  = false;  // flip left/right for shelves 25..40 (L)
 static const bool kMirrorLeftY  = false;  // flip top/bottom for shelves 25..40 (L)
 
-// Map shelf number (1..40) to (x,y) in a 10x4 grid.
-// Right board (1..24): 6 columns × 4 rows (x = 4..9), row-major, top→bottom, left→right.
-// Left board (25..40): L-formed in the same 10×4 view:
+// Map shelf number (1..40) to (x,y) in a 6×4 grid (both walls sample the same 6-wide image).
+// Right board (1..24): row-major in a 6×4 (top→bottom, left→right).
+// Left board (25..40): L-formed inside the same 6×4:
 // Row0: -- -- -- -- 25 26
 // Row1: -- -- -- -- 27 28
 // Row2: 29 30 31 32 33 34
 // Row3: 35 36 37 38 39 40
 static inline void shelfToXY(int shelf, int& x, int& y)
 {
-  // Right board (1..24)
+  // Right board (1..24): row-major 6×4
   if (shelf >= 1 && shelf <= 24) {
     const int row = (shelf - 1) / 6;   // 0..3
     const int col = (shelf - 1) % 6;   // 0..5
-    int xr = 4 + col; // right board occupies x = 4..9
-    int yr = row;     // y = 0..3
-    if (kMirrorRightX) xr = 4 + (5 - col);
-    if (kMirrorRightY) yr = 3 - row;
+    int xr = col;
+    int yr = row;
+    if (kMirrorRightX) xr = 5 - xr;
+    if (kMirrorRightY) yr = 3 - yr;
     x = xr; y = yr; return;
   }
 
-  // Left board (25..40)
+  // Left board (25..40): L-formed inside the same 6×4
   if (shelf >= 25 && shelf <= 40) {
     int xl = 0, yl = 0;
-    if (shelf <= 28) {
-      // top-right 2×2: (x,y) = (4,0),(5,0),(4,1),(5,1)
-      const int i = shelf - 25; // 0..3
-      yl = i / 2;               // 0,0,1,1
-      xl = 4 + (i % 2);         // 4,5,4,5
-    } else if (shelf <= 34) {
-      // full row y=2, x=0..5 for 29..34
-      xl = (shelf - 29); // 0..5
-      yl = 2;
-    } else {
-      // full row y=3, x=0..5 for 35..40
-      xl = (shelf - 35); // 0..5
-      yl = 3;
+    switch (shelf) {
+      // Row0: -- -- -- -- 25 26
+      case 25: yl = 0; xl = 4 + (shelf - 25); break; // x=4
+      case 26: yl = 0; xl = 4 + (shelf - 25); break; // x=5
+
+      // Row1: -- -- -- -- 27 28
+      case 27: yl = 1; xl = 4 + (shelf - 27); break; // x=4
+      case 28: yl = 1; xl = 4 + (shelf - 27); break; // x=5
+
+      // Row2: 29 30 31 32 33 34
+      case 29: case 30: case 31: case 32: case 33: case 34:
+        yl = 2; xl = (shelf - 29); break; // x=0..5
+
+      // Row3: 35 36 37 38 39 40
+      case 35: case 36: case 37: case 38: case 39: case 40:
+        yl = 3; xl = (shelf - 35); break; // x=0..5
+
+      default:
+        xl = 0; yl = 0; break; // safety fallback
     }
-    if (kMirrorLeftX) xl = 5 - xl; // flip within 6-wide view
+    if (kMirrorLeftX) xl = 5 - xl;
     if (kMirrorLeftY) yl = 3 - yl;
     x = xl; y = yl; return;
   }
@@ -1178,7 +1190,7 @@ void AmbiPi::calculateGameWallFrameFromFrame(cv::Mat frame)
 	int interpolation = cv::INTER_AREA; // cv::INTER_LANCZOS4; // INTER_CUBIC
 
 	cv::Mat targetFrame;
-	cv::resize(frame, targetFrame, cv::Size(10, 4), 0, 0, interpolation);
+	cv::resize(frame, targetFrame, cv::Size(6, 4), 0, 0, interpolation);
 
 	sendFrameToGameWall(targetFrame);
 }
