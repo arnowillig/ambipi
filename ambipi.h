@@ -97,6 +97,8 @@ public:
 	cv::Mat lastFrame() const;
 	bool getEnableDisplayVideo() const;
 	void setEnableDisplayVideo(bool enableDisplayVideo);
+	bool getEnableGameWallAmbilight() const;
+	void setEnableGameWallAmbilight(bool enable);
 	bool getEnableGamingTable() const;
 	void setEnableGamingTable(bool enableGamingTable);
 	void fadeColors(float pct);
@@ -115,6 +117,7 @@ private:
 	cv::Mat _lastFrame;
 	bool _enableCropping;
 	bool _enableDisplayVideo;
+	bool _enableGameWallAmbilight;
 	bool _enableGamingTable;
 	std::vector<uint8_t> _lut;
 	
