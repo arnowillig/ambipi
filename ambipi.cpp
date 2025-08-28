@@ -1308,112 +1308,92 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
 #else
 void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
 {
-	
-	// setColor(0,255,0);
-	int top   = LEDS_TOP     - 2;
-	int bot   = LEDS_BOTTOM  - 2;
-	int left  = LEDS_LEFT    - 2;
-	int right = LEDS_RIGHT   - 2;
+    // Dimensions excluding the physical LED corners
+    const int top   = LEDS_TOP    - 2;
+    const int bot   = LEDS_BOTTOM - 2;
+    const int left  = LEDS_LEFT   - 2;
+    const int right = LEDS_RIGHT  - 2;
 
-	double factor = 4.0;
-	double dw = factor * frame.cols / (double) top;
-	double dh = factor * frame.rows / (double) left;
+    // Sampling window sizes (integer, avoid reallocation thrash)
+    const double factor = 4.0;
+    const int dw = std::max(1, static_cast<int>(std::lround(factor * frame.cols / static_cast<double>(top ))));
+    const int dh = std::max(1, static_cast<int>(std::lround(factor * frame.rows / static_cast<double>(left))));
 
+    // Temporary 1D color strips (reuse buffers across calls)
+    static cv::Mat colorsTopNew, colorsBottomNew, colorsLeftNew, colorsRightNew;
+    colorsTopNew.create(1,   top,   CV_8UC3);
+    colorsBottomNew.create(1, bot,  CV_8UC3);
+    colorsLeftNew.create( left, 1,  CV_8UC3);
+    colorsRightNew.create(right, 1, CV_8UC3);
 
-//	int interpolation = cv::INTER_LINEAR; // INTER_CUBIC
-//	int interpolation = cv::INTER_CUBIC;
-	int interpolation = cv::INTER_AREA;
-	cv::Mat colorsTop, colorsBottom, colorsLeft, colorsRight;
-	cv::resize(frame(cv::Rect(0,0,frame.cols, dh)), colorsTop, cv::Size(top, 1), 0, 0, interpolation);
-	cv::resize(frame(cv::Rect(0, frame.rows-dh, frame.cols, dh)), colorsBottom, cv::Size(bot, 1), 0, 0, interpolation);
-	cv::resize(frame(cv::Rect(0,0, dw, frame.rows)), colorsLeft, cv::Size(1, left), 0, 0, interpolation);
-	cv::resize(frame(cv::Rect(frame.cols-dw, 0, dw, frame.rows)), colorsRight, cv::Size(1, right), 0, 0, interpolation);
+    // Downsample edge regions into 1D strips (INTER_AREA is fast and good for downscaling)
+    cv::resize(frame(cv::Rect(0,            0,          frame.cols, dh)), colorsTopNew,    cv::Size(top,  1), 0, 0, cv::INTER_AREA);
+    cv::resize(frame(cv::Rect(0,  frame.rows - dh,      frame.cols, dh)), colorsBottomNew, cv::Size(bot,  1), 0, 0, cv::INTER_AREA);
+    cv::resize(frame(cv::Rect(0,            0,                    dw, frame.rows)), colorsLeftNew,  cv::Size(1, left),  0, 0, cv::INTER_AREA);
+    cv::resize(frame(cv::Rect(frame.cols - dw, 0,       dw, frame.rows)), colorsRightNew, cv::Size(1, right), 0, 0, cv::INTER_AREA);
 
-	cv::addWeighted(_colorsT, _alpha, colorsTop,    1.0 - _alpha, 0.0, _colorsT);
-	cv::addWeighted(_colorsB, _alpha, colorsBottom, 1.0 - _alpha, 0.0, _colorsB);
-	cv::addWeighted(_colorsL, _alpha, colorsLeft,   1.0 - _alpha, 0.0, _colorsL);
-	cv::addWeighted(_colorsR, _alpha, colorsRight,  1.0 - _alpha, 0.0, _colorsR);
+    // Exponential smoothing of strips into persistent members
+    cv::addWeighted(_colorsT, _alpha, colorsTopNew,    1.0 - _alpha, 0.0, _colorsT);
+    cv::addWeighted(_colorsB, _alpha, colorsBottomNew, 1.0 - _alpha, 0.0, _colorsB);
+    cv::addWeighted(_colorsL, _alpha, colorsLeftNew,   1.0 - _alpha, 0.0, _colorsL);
+    cv::addWeighted(_colorsR, _alpha, colorsRightNew,  1.0 - _alpha, 0.0, _colorsR);
 
-	cv::Vec3b c;
-	int r,g,b;
-	if (bgr) {
-		r = 0;
-		g = 1;
-		b = 2;
-	} else {
-		r = 2;
-		g = 1;
-		b = 0;
-	}
+    // Color channel indices (OpenCV holds BGR)
+    const int r = bgr ? 0 : 2;
+    const int g = 1;
+    const int b = bgr ? 2 : 0;
+
+    // Use row pointers for fast access (avoid at<> overhead)
+    const cv::Vec3b* pL = _colorsL.ptr<cv::Vec3b>();
+    const cv::Vec3b* pB = _colorsB.ptr<cv::Vec3b>();
+    const cv::Vec3b* pR = _colorsR.ptr<cv::Vec3b>();
+    const cv::Vec3b* pT = _colorsT.ptr<cv::Vec3b>();
+
+    // --- Left interior (shift down by one; corner handled separately) ---
     for (int i = 1; i < LEDS_LEFT; ++i) {
-        c = _colorsL.at<cv::Vec3b>(cv::Point(0, i));
-        const int dest = i - 1;
-        setColorLeft(dest, c[r], c[g], c[b]);
+        const cv::Vec3b& c = pL[i - 1]; // pL has length `left`, maps to LED indices 1..LEDS_LEFT-1
+        setColorLeft(i - 1, c[r], c[g], c[b]);
     }
+
     // --- Bottom interior (exclude corners) ---
     for (int i = 0; i < bot; ++i) {
-        c = _colorsB.at<cv::Vec3b>(cv::Point(i, 0));
+        const cv::Vec3b& c = pB[i];
         setColorBottom(i + 1, c[r], c[g], c[b]);
     }
 
-    // --- Right interior (exclude corners; reverse order like before) ---
+    // --- Right interior (exclude corners; reverse order) ---
     for (int i = right - 1; i >= 0; --i) {
-        c = _colorsR.at<cv::Vec3b>(cv::Point(0, i));
+        const cv::Vec3b& c = pR[i];
         setColorRight(i + 1, c[r], c[g], c[b]);
     }
 
-    // --- Top interior (exclude corners; reverse order like before) ---
+    // --- Top interior (exclude corners; reverse order) ---
     for (int i = top - 1; i >= 0; --i) {
-        c = _colorsT.at<cv::Vec3b>(cv::Point(i, 0));
+        const cv::Vec3b& c = pT[i];
         setColorTop(i + 1, c[r], c[g], c[b]);
     }
 
-    // --- Corners: compute from actual samples to avoid bleed ---
-    auto avg = [](const cv::Vec3b& a, const cv::Vec3b& b) {
-        return cv::Vec3b( (uint8_t)((a[0] + b[0]) >> 1),
-                          (uint8_t)((a[1] + b[1]) >> 1),
-                          (uint8_t)((a[2] + b[2]) >> 1) );
-    };
-    auto mixW = [](const cv::Vec3b& a, const cv::Vec3b& b, float t) {
-        float it = 1.0f - t;
-        return cv::Vec3b(
-            (uint8_t)std::lround(a[0]*it + b[0]*t),
-            (uint8_t)std::lround(a[1]*it + b[1]*t),
-            (uint8_t)std::lround(a[2]*it + b[2]*t)
-        );
-    };
+    // --- Corners: average of adjacent strip ends ---
+    const cv::Vec3b TL = (pT[0]       + pL[0])        * 0.5;
+    const cv::Vec3b TR = (pT[top-1]   + pR[0])        * 0.5;
+    const cv::Vec3b BL = (pB[0]       + pL[left-1])   * 0.5;
+    const cv::Vec3b BR = (pB[bot-1]   + pR[right-1])  * 0.5;
 
-    // Samples at ends of the reduced strips (interior areas)
-    const cv::Vec3b t0 = _colorsT.at<cv::Vec3b>(cv::Point(0,       0));      // top-left interior end
-    const cv::Vec3b tN = _colorsT.at<cv::Vec3b>(cv::Point(top-1,   0));      // top-right interior end
-    const cv::Vec3b b0 = _colorsB.at<cv::Vec3b>(cv::Point(0,       0));      // bottom-left interior end
-    const cv::Vec3b bN = _colorsB.at<cv::Vec3b>(cv::Point(bot-1,   0));      // bottom-right interior end
-    const cv::Vec3b l0 = _colorsL.at<cv::Vec3b>(cv::Point(0,       0));      // left-top interior end
-    const cv::Vec3b lN = _colorsL.at<cv::Vec3b>(cv::Point(0, left-1));       // left-bottom interior end
-    const cv::Vec3b r0 = _colorsR.at<cv::Vec3b>(cv::Point(0,       0));      // right-top interior end
-    const cv::Vec3b rN = _colorsR.at<cv::Vec3b>(cv::Point(0, right-1));      // right-bottom interior end
+    setColorTop(0,              TL[r], TL[g], TL[b]);
+    setColorLeft(0,             TL[r], TL[g], TL[b]);
 
-    const cv::Vec3b TL = avg(t0, l0);
-    const cv::Vec3b TR = avg(tN, r0);
-    const cv::Vec3b BL = avg(b0, lN);
-    const cv::Vec3b BR = avg(bN, rN);
+    setColorTop(LEDS_TOP-1,     TR[r], TR[g], TR[b]);
+    setColorRight(0,            TR[r], TR[g], TR[b]);
 
-    // Apply to the actual corner LEDs
-    setColorTop(0,             TL[r], TL[g], TL[b]);
-    setColorLeft(0,            TL[r], TL[g], TL[b]);
-
-    setColorTop(LEDS_TOP-1,    TR[r], TR[g], TR[b]);
-    setColorRight(0,           TR[r], TR[g], TR[b]);
-
-    setColorBottom(0,          BL[r], BL[g], BL[b]);
-    setColorLeft(LEDS_LEFT-1,  BL[r], BL[g], BL[b]);
+    setColorBottom(0,           BL[r], BL[g], BL[b]);
+    setColorLeft(LEDS_LEFT-1,   BL[r], BL[g], BL[b]);
 
     setColorBottom(LEDS_BOTTOM-1, BR[r], BR[g], BR[b]);
     setColorRight(LEDS_RIGHT-1,   BR[r], BR[g], BR[b]);
 
-    // Set second bottom-left LED to the exact corner color
+    // Keep your explicit fix: second/third from bottom-left forced to corner color
     setColorLeft(LEDS_LEFT-2, BL[r], BL[g], BL[b]);
-    setColorLeft(LEDS_LEFT-3, BL[r], BL[g], BL[b]);    
+    setColorLeft(LEDS_LEFT-3, BL[r], BL[g], BL[b]);
 }
 #endif
 
