@@ -1345,15 +1345,19 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
 		g = 1;
 		b = 0;
 	}
-    // LEFT: shift up by +3 (fix was +1; colors appeared 2 LEDs too low)
-    for (int i = 0; i < LEDS_LEFT - 3; i++) {
+    // LEFT: apply signed offset (negative = move up, positive = move down)
+    // Previous mapping used +3; user reports it's 4 LEDs off in the other direction.
+    // Use -1 here (i.e., opposite direction by 4 from +3).
+    constexpr int kLeftShift = -1;
+    for (int i = 0; i < LEDS_LEFT; ++i) {
         c = _colorsL.at<cv::Vec3b>(cv::Point(0, i));
-        setColorLeft(i + 3, c[r], c[g], c[b]);
+        const int dest = i + kLeftShift;
+        if (dest >= 0 && dest < LEDS_LEFT) {
+            setColorLeft(dest, c[r], c[g], c[b]);
+        }
     }
-    // Duplicate the last sampled color into the final 2 LEDs and the bottom-corner continuity LED
-    setColorLeft(LEDS_LEFT - 1, c[r], c[g], c[b]);
-    setColorLeft(LEDS_LEFT - 2, c[r], c[g], c[b]);
-    setColorBottom(0,           c[r], c[g], c[b]);
+    // Corner continuity (bottom-left seam) uses the last sampled color
+    setColorBottom(0, c[r], c[g], c[b]);
 
 	for (int i=0; i<LEDS_BOTTOM-2; i++) {
 		c = _colorsB.at<cv::Vec3b>(cv::Point(i, 0));
