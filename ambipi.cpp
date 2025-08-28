@@ -1374,10 +1374,10 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
     }
 
     // --- Corners: average of adjacent strip ends ---
-    const cv::Vec3b TL = (pT[0]       + pL[0])        * 0.5;
-    const cv::Vec3b TR = (pT[top-1]   + pR[0])        * 0.5;
+    const cv::Vec3b TL = pT[0]; // (pT[0]       + pL[0])        * 0.5;
+    const cv::Vec3b TR = pT[top-1]; // (pT[top-1]   + pR[0])        * 0.5;
     const cv::Vec3b BL = pB[0]; // (pB[0]       + pL[left-3])   * 0.5;
-    const cv::Vec3b BR = (pB[bot-1]   + pR[right-1])  * 0.5;
+    const cv::Vec3b BR = pB[bot-1]; // (pB[bot-1]   + pR[right-1])  * 0.5;
 
     setColorTop(0,              TL[r], TL[g], TL[b]);
     setColorLeft(0,             TL[r], TL[g], TL[b]);
