@@ -1345,12 +1345,15 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
 		g = 1;
 		b = 0;
 	}
-	for (int i=0; i<LEDS_LEFT-2; i++) {
-		c = _colorsL.at<cv::Vec3b>(cv::Point(0, i));
-		setColorLeft(i+1, c[r], c[g], c[b]);
-	}
-	setColorLeft(LEDS_LEFT-1, c[r], c[g], c[b]);
-	setColorBottom(0, c[r], c[g], c[b]);
+    // LEFT: shift up by +3 (fix was +1; colors appeared 2 LEDs too low)
+    for (int i = 0; i < LEDS_LEFT - 3; i++) {
+        c = _colorsL.at<cv::Vec3b>(cv::Point(0, i));
+        setColorLeft(i + 3, c[r], c[g], c[b]);
+    }
+    // Duplicate the last sampled color into the final 2 LEDs and the bottom-corner continuity LED
+    setColorLeft(LEDS_LEFT - 1, c[r], c[g], c[b]);
+    setColorLeft(LEDS_LEFT - 2, c[r], c[g], c[b]);
+    setColorBottom(0,           c[r], c[g], c[b]);
 
 	for (int i=0; i<LEDS_BOTTOM-2; i++) {
 		c = _colorsB.at<cv::Vec3b>(cv::Point(i, 0));
