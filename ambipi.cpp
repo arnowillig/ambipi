@@ -1380,6 +1380,14 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
                           (uint8_t)((a[1] + b[1]) >> 1),
                           (uint8_t)((a[2] + b[2]) >> 1) );
     };
+    auto mixW = [](const cv::Vec3b& a, const cv::Vec3b& b, float t) {
+        float it = 1.0f - t;
+        return cv::Vec3b(
+            (uint8_t)std::lround(a[0]*it + b[0]*t),
+            (uint8_t)std::lround(a[1]*it + b[1]*t),
+            (uint8_t)std::lround(a[2]*it + b[2]*t)
+        );
+    };
 
     // Samples at ends of the reduced strips (interior areas)
     const cv::Vec3b t0 = _colorsT.at<cv::Vec3b>(cv::Point(0,       0));      // top-left interior end
@@ -1408,6 +1416,12 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
 
     setColorBottom(LEDS_BOTTOM-1, BR[r], BR[g], BR[b]);
     setColorRight(LEDS_RIGHT-1,   BR[r], BR[g], BR[b]);
+
+    // Smoothing for second bottom-left LED (index 1): blend between bottom and left seams
+    if (LEDS_BOTTOM > 1) {
+        const cv::Vec3b BL2 = mixW(b0, lN, 0.33f); // slight pull towards left strip at the seam
+        setColorBottom(1, BL2[r], BL2[g], BL2[b]);
+    }
 }
 #endif
 
