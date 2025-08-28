@@ -117,6 +117,7 @@ AmbiPi::AmbiPi() : _mode(Off), _alpha(0.5), _gamma(0), _enableCropping(false)
 	clearLastFrame(0,0,0);
 	_enableDisplayVideo = false;
 	_enableGamingTable = false;
+	_enableGameWallAmbilight = false;
 }
 
 AmbiPi::~AmbiPi()
@@ -1168,6 +1169,7 @@ void AmbiPi::sendFrameToGameWall(const cv::Mat& resized6x4BGR)
 */
 void AmbiPi::sendFrameToGameWall(const cv::Mat& resized6x4BGR)
 {
+    if (!_enableGameWallAmbilight) return;
     // Build raw LED buffers for this frame (per board)
     std::vector<uint8_t> rightCurr, leftCurr;
     buildLedBuffersFromFrame(resized6x4BGR, rightCurr, leftCurr);
@@ -1200,6 +1202,7 @@ void AmbiPi::sendFrameToGameWall(const cv::Mat& resized6x4BGR)
 
 void AmbiPi::calculateGameWallFrameFromFrame(cv::Mat frame)
 {
+    if (!_enableGameWallAmbilight) return;
 	int w = frame.cols;
 	int h = frame.rows;
 
@@ -1406,4 +1409,14 @@ bool AmbiPi::getEnableGamingTable() const
 void AmbiPi::setEnableGamingTable(bool enableGamingTable)
 {
 	_enableGamingTable = enableGamingTable;
+}
+
+bool AmbiPi::getEnableGameWallAmbilight() const
+{
+    return _enableGameWallAmbilight;
+}
+
+void AmbiPi::setEnableGameWallAmbilight(bool enable)
+{
+    _enableGameWallAmbilight = enable;
 }
