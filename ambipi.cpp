@@ -1417,10 +1417,9 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
     setColorBottom(LEDS_BOTTOM-1, BR[r], BR[g], BR[b]);
     setColorRight(LEDS_RIGHT-1,   BR[r], BR[g], BR[b]);
 
-    // Smoothing for second bottom-left LED (index 1): blend between bottom and left seams
     if (LEDS_BOTTOM > 1) {
-        const cv::Vec3b BL2 = mixW(b0, lN, 0.33f); // slight pull towards left strip at the seam
-        setColorBottom(1, BL2[r], BL2[g], BL2[b]);
+        // Set second bottom-left LED to the exact corner color
+        setColorBottom(1, BL[r], BL[g], BL[b]);
     }
 }
 #endif
