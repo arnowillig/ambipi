@@ -1274,7 +1274,7 @@ void AmbiPi::calculateKickerLightsFromFrame(cv::Mat frame)
         uint8_t B = bgr[0];
         // optional gamma correction using LUT if configured
         if (!_lut.empty()) { R = _lut[R]; G = _lut[G]; B = _lut[B]; }
-        sendWiZColor(WIZ_IPS[i], R, G, B);
+        sendWiZColor(WIZ_IPS[3-i], R, G, B);
     }
 }
 
