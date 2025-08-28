@@ -1061,6 +1061,7 @@ static bool sendDDP(const std::vector<uint8_t>& rgb)
 }
 */
 
+
 static bool sendDDP(const char* host, uint16_t port, const std::vector<uint8_t>& rgb)
 {
     if (rgb.empty())
@@ -1151,6 +1152,36 @@ static bool sendDDP(const char* host, uint16_t port, const std::vector<uint8_t>&
     return true;
 }
 
+// --- WiZ local UDP sender (port 38899) ---
+static constexpr uint16_t WIZ_PORT = 38899;
+static const std::array<const char*,4> WIZ_IPS = {
+    "192.168.178.80",
+    "192.168.178.87",
+    "192.168.178.50",
+    "192.168.178.53"
+};
+
+static void sendWiZColor(const char* ip, uint8_t r, uint8_t g, uint8_t b)
+{
+    // {"method":"setPilot","params":{"state":true,"r":R,"g":G,"b":B}}
+    char payload[128];
+    int n = snprintf(payload, sizeof(payload),
+                     "{\"method\":\"setPilot\",\"params\":{\"state\":true,\"r\":%u,\"g\":%u,\"b\":%u}}",
+                     (unsigned)r, (unsigned)g, (unsigned)b);
+    if (n <= 0) return;
+
+    int sock = ::socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock < 0) return;
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port   = htons(WIZ_PORT);
+    if (::inet_pton(AF_INET, ip, &addr.sin_addr) != 1) { ::close(sock); return; }
+
+    (void)::sendto(sock, payload, n, 0, (sockaddr*)&addr, sizeof(addr));
+    ::close(sock);
+}
+
 
 
 /*
@@ -1203,15 +1234,48 @@ void AmbiPi::sendFrameToGameWall(const cv::Mat& resized6x4BGR)
 void AmbiPi::calculateGameWallFrameFromFrame(cv::Mat frame)
 {
     if (!_enableGameWallAmbilight) return;
-	int w = frame.cols;
-	int h = frame.rows;
+    int w = frame.cols;
+    int h = frame.rows;
 
-	int interpolation = cv::INTER_AREA; // cv::INTER_LANCZOS4; // INTER_CUBIC
+    int interpolation = cv::INTER_AREA; // cv::INTER_LANCZOS4; // INTER_CUBIC
 
-	cv::Mat targetFrame;
-	cv::resize(frame, targetFrame, cv::Size(6, 4), 0, 0, interpolation);
+    cv::Mat targetFrame;
+    cv::resize(frame, targetFrame, cv::Size(6, 4), 0, 0, interpolation);
 
-	sendFrameToGameWall(targetFrame);
+    sendFrameToGameWall(targetFrame);
+}
+
+void AmbiPi::calculateKickerLightsFromFrame(cv::Mat frame)
+{
+    // Use the same toggle unless you want a dedicated one later
+    if (!_enableGameWallAmbilight) return;
+
+    if (frame.empty()) return;
+    const int w = frame.cols;
+    const int h = frame.rows;
+
+    // Take centered square: full height if possible (landscape), otherwise clamp to width
+    int side = h;
+    if (side > w) side = w; // handle portrait input robustly
+    const int x = (w - side) / 2;
+    const int y = 0;
+
+    cv::Mat square = frame(cv::Rect(x, y, side, side));
+
+    // Downscale to 1x4 (BGR)
+    cv::Mat small;
+    cv::resize(square, small, cv::Size(1, 4), 0, 0, cv::INTER_AREA);
+
+    // Extract four colors top->bottom and send to WiZ bulbs in given order
+    for (int i = 0; i < 4; ++i) {
+        const cv::Vec3b bgr = small.at<cv::Vec3b>(i, 0);
+        uint8_t R = bgr[2];
+        uint8_t G = bgr[1];
+        uint8_t B = bgr[0];
+        // optional gamma correction using LUT if configured
+        if (!_lut.empty()) { R = _lut[R]; G = _lut[G]; B = _lut[B]; }
+        sendWiZColor(WIZ_IPS[i], R, G, B);
+    }
 }
 
 bool AmbiPi::sendFullFrame(cv::Mat frame)
@@ -1257,55 +1321,6 @@ bool AmbiPi::sendKDPDatagram(const uint8_t* data, size_t size)
 	return true;
 }
 
-#if 0
-void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
-{
-//	cv::GaussianBlur(frame, frame, cv::Size(5, 5), 0);
-    int ledsTop    = LEDS_TOP - 2;
-    int ledsBottom = LEDS_BOTTOM - 2;
-    int ledsLeft   = LEDS_LEFT - 2;
-    int ledsRight  = LEDS_RIGHT - 2;
-
-    double factor = 4.0;
-    int dw = static_cast<int>(factor * frame.cols / ledsTop);
-    int dh = static_cast<int>(factor * frame.rows / ledsLeft);
-
-    int interpolation = cv::INTER_LINEAR;
-    cv::resize(frame(cv::Rect(0, 0, frame.cols, dh)), _colorsT, cv::Size(ledsTop, 1), 0, 0, interpolation);
-    cv::resize(frame(cv::Rect(0, frame.rows - dh, frame.cols, dh)), _colorsB, cv::Size(ledsBottom, 1), 0, 0, interpolation);
-    cv::resize(frame(cv::Rect(0, 0, dw, frame.rows)), _colorsL, cv::Size(1, ledsLeft), 0, 0, interpolation);
-    cv::resize(frame(cv::Rect(frame.cols - dw, 0, dw, frame.rows)), _colorsR, cv::Size(1, ledsRight), 0, 0, interpolation);
-
-    int rIdx = bgr ? 0 : 2;
-    int gIdx = 1;
-    int bIdx = bgr ? 2 : 0;
-
-    // Left side
-    for (int i = 0; i < ledsLeft; ++i) {
-        auto c = _colorsL.at<cv::Vec3b>(i, 0);
-        setColorLeft(i + 1, c[rIdx], c[gIdx], c[bIdx]);
-    }
-
-    // Bottom side
-    for (int i = 0; i < ledsBottom; ++i) {
-        auto c = _colorsB.at<cv::Vec3b>(0, i);
-        setColorBottom(i + 1, c[rIdx], c[gIdx], c[bIdx]);
-    }
-
-    // Right side (reverse order)
-    for (int i = ledsRight - 1; i >= 0; --i) {
-        auto c = _colorsR.at<cv::Vec3b>(i, 0);
-        setColorRight(ledsRight - i, c[rIdx], c[gIdx], c[bIdx]);
-    }
-
-    // Top side (reverse order)
-    for (int i = ledsTop - 1; i >= 0; --i) {
-        auto c = _colorsT.at<cv::Vec3b>(0, i);
-        setColorTop(ledsTop - i, c[rIdx], c[gIdx], c[bIdx]);
-    }
-}
-
-#else
 void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
 {
     // Dimensions excluding the physical LED corners
@@ -1395,7 +1410,6 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
     setColorLeft(LEDS_LEFT-2, BL[r], BL[g], BL[b]);
     setColorLeft(LEDS_LEFT-3, BL[r], BL[g], BL[b]);
 }
-#endif
 
 void AmbiPi::setLastFrame(cv::Mat frame)
 {

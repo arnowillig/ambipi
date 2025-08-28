@@ -197,6 +197,7 @@ int main(int argc, char *argv[])
 					}
 					if (ambiPi.getEnableGameWallAmbilight()) {
 						ambiPi.calculateGameWallFrameFromFrame(frame);
+						ambiPi.calculateKickerLightsFromFrame(frame);
 					}
 					sleep = 10;
 				}

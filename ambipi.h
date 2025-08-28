@@ -89,6 +89,7 @@ public:
 	void calculateGameWallFrameFromFrame(cv::Mat frame);
 	void calculateDisplayFrameFromFrame(cv::Mat frame);
 	void calculateAmbilightFromFrame(cv::Mat frame, bool bgr=false);
+	void calculateKickerLightsFromFrame(cv::Mat frame);
 	void clear();
 	void render();
 	cv::Mat createTestImage(int w, int h);
