@@ -1356,29 +1356,58 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
             setColorLeft(dest, c[r], c[g], c[b]);
         }
     }
-    // Corner continuity (bottom-left seam) uses the last sampled color
-    setColorBottom(0, c[r], c[g], c[b]);
+    // --- Bottom interior (exclude corners) ---
+    for (int i = 0; i < bot; ++i) {
+        c = _colorsB.at<cv::Vec3b>(cv::Point(i, 0));
+        setColorBottom(i + 1, c[r], c[g], c[b]);
+    }
 
-	for (int i=0; i<LEDS_BOTTOM-2; i++) {
-		c = _colorsB.at<cv::Vec3b>(cv::Point(i, 0));
-		setColorBottom(i+1, c[r], c[g], c[b]);
-	}
-	setColorBottom(LEDS_BOTTOM-1, c[r], c[g], c[b]);
-	setColorRight(LEDS_RIGHT-1, c[r], c[g], c[b]);
+    // --- Right interior (exclude corners; reverse order like before) ---
+    for (int i = right - 1; i >= 0; --i) {
+        c = _colorsR.at<cv::Vec3b>(cv::Point(0, i));
+        setColorRight(i + 1, c[r], c[g], c[b]);
+    }
 
-	for (int i=LEDS_RIGHT-3; i>=0; i--) {
-		c = _colorsR.at<cv::Vec3b>(cv::Point(0, i));
-		setColorRight(i+1, c[r], c[g], c[b]);
-	}
-	setColorRight(0,        c[r], c[g], c[b]);
-	setColorTop(LEDS_TOP-1, c[r], c[g], c[b]);
+    // --- Top interior (exclude corners; reverse order like before) ---
+    for (int i = top - 1; i >= 0; --i) {
+        c = _colorsT.at<cv::Vec3b>(cv::Point(i, 0));
+        setColorTop(i + 1, c[r], c[g], c[b]);
+    }
 
-	for (int i=LEDS_TOP-3; i>=0; i--) {
-		c = _colorsT.at<cv::Vec3b>(cv::Point(i, 0));
-		setColorTop(i+1, c[r], c[g], c[b]);
-	}
-	setColorTop( 0, c[r], c[g], c[b]);
-	setColorLeft(0, c[r], c[g], c[b]);
+    // --- Corners: compute from actual samples to avoid bleed ---
+    auto avg = [](const cv::Vec3b& a, const cv::Vec3b& b) {
+        return cv::Vec3b( (uint8_t)((a[0] + b[0]) >> 1),
+                          (uint8_t)((a[1] + b[1]) >> 1),
+                          (uint8_t)((a[2] + b[2]) >> 1) );
+    };
+
+    // Samples at ends of the reduced strips (interior areas)
+    const cv::Vec3b t0 = _colorsT.at<cv::Vec3b>(cv::Point(0,       0));      // top-left interior end
+    const cv::Vec3b tN = _colorsT.at<cv::Vec3b>(cv::Point(top-1,   0));      // top-right interior end
+    const cv::Vec3b b0 = _colorsB.at<cv::Vec3b>(cv::Point(0,       0));      // bottom-left interior end
+    const cv::Vec3b bN = _colorsB.at<cv::Vec3b>(cv::Point(bot-1,   0));      // bottom-right interior end
+    const cv::Vec3b l0 = _colorsL.at<cv::Vec3b>(cv::Point(0,       0));      // left-top interior end
+    const cv::Vec3b lN = _colorsL.at<cv::Vec3b>(cv::Point(0, left-1));       // left-bottom interior end
+    const cv::Vec3b r0 = _colorsR.at<cv::Vec3b>(cv::Point(0,       0));      // right-top interior end
+    const cv::Vec3b rN = _colorsR.at<cv::Vec3b>(cv::Point(0, right-1));      // right-bottom interior end
+
+    const cv::Vec3b TL = avg(t0, l0);
+    const cv::Vec3b TR = avg(tN, r0);
+    const cv::Vec3b BL = avg(b0, lN);
+    const cv::Vec3b BR = avg(bN, rN);
+
+    // Apply to the actual corner LEDs
+    setColorTop(0,             TL[r], TL[g], TL[b]);
+    setColorLeft(0,            TL[r], TL[g], TL[b]);
+
+    setColorTop(LEDS_TOP-1,    TR[r], TR[g], TR[b]);
+    setColorRight(0,           TR[r], TR[g], TR[b]);
+
+    setColorBottom(0,          BL[r], BL[g], BL[b]);
+    setColorLeft(LEDS_LEFT-1,  BL[r], BL[g], BL[b]);
+
+    setColorBottom(LEDS_BOTTOM-1, BR[r], BR[g], BR[b]);
+    setColorRight(LEDS_RIGHT-1,   BR[r], BR[g], BR[b]);
 }
 #endif
 
