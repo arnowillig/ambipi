@@ -1296,7 +1296,7 @@ void AmbiPi::calculateKickerLightsFromFrame(cv::Mat frame)
             if (!_lut.empty()) { R = _lut[R]; G = _lut[G]; B = _lut[B]; }
             sendWiZColor(WIZ_LEFT_QUARTER_IP, R, G, B);
         }
-
+/*
         // Right quarter: x = side-qw .. side-1
         cv::Mat rightQ = square(cv::Rect(side - qw, 0, qw, side));
         cv::Mat right1x1;
@@ -1307,6 +1307,7 @@ void AmbiPi::calculateKickerLightsFromFrame(cv::Mat frame)
             if (!_lut.empty()) { R = _lut[R]; G = _lut[G]; B = _lut[B]; }
             sendWiZColor(WIZ_RIGHT_QUARTER_IP, R, G, B);
         }
+*/
     }
 }
 
