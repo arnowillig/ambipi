@@ -1347,7 +1347,7 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
 	}
 	for (int i=0; i<LEDS_LEFT-2; i++) {
 		c = _colorsL.at<cv::Vec3b>(cv::Point(0, i));
-		setColorLeft(i+1, c[r], c[g], c[b]);
+		setColorLeft(i+2, c[r], c[g], c[b]);
 	}
 	setColorLeft(LEDS_LEFT-1, c[r], c[g], c[b]);
 	setColorBottom(0, c[r], c[g], c[b]);
