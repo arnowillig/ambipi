@@ -1161,6 +1161,10 @@ static const std::array<const char*,4> WIZ_IPS = {
     "192.168.178.53"
 };
 
+// Extra single-bulb samples (quarter-based)
+static const char* WIZ_RIGHT_QUARTER_IP = "192.168.178.127"; // right side
+static const char* WIZ_LEFT_QUARTER_IP  = "192.168.178.109"; // left side
+
 static void sendWiZColor(const char* ip, uint8_t r, uint8_t g, uint8_t b)
 {
     // {"method":"setPilot","params":{"state":true,"r":R,"g":G,"b":B}}
@@ -1267,6 +1271,7 @@ void AmbiPi::calculateKickerLightsFromFrame(cv::Mat frame)
     cv::resize(square, small, cv::Size(1, 4), 0, 0, cv::INTER_AREA);
 
     // Extract four colors top->bottom and send to WiZ bulbs in given order
+    // (order remains unchanged)
     for (int i = 0; i < 4; ++i) {
         const cv::Vec3b bgr = small.at<cv::Vec3b>(i, 0);
         uint8_t R = bgr[2];
@@ -1275,6 +1280,33 @@ void AmbiPi::calculateKickerLightsFromFrame(cv::Mat frame)
         // optional gamma correction using LUT if configured
         if (!_lut.empty()) { R = _lut[R]; G = _lut[G]; B = _lut[B]; }
         sendWiZColor(WIZ_IPS[3-i], R, G, B);
+    }
+
+    // --- Extra two bulbs: sample left/right quarters (25% width each, full height) ---
+    if (side >= 4) { // safety guard for very small frames
+        const int qw = std::max(1, side / 4); // quarter width
+
+        // Left quarter: x = 0 .. qw-1
+        cv::Mat leftQ = square(cv::Rect(0, 0, qw, side));
+        cv::Mat left1x1;
+        cv::resize(leftQ, left1x1, cv::Size(1, 1), 0, 0, cv::INTER_AREA);
+        {
+            const cv::Vec3b bgr = left1x1.at<cv::Vec3b>(0, 0);
+            uint8_t R = bgr[2], G = bgr[1], B = bgr[0];
+            if (!_lut.empty()) { R = _lut[R]; G = _lut[G]; B = _lut[B]; }
+            sendWiZColor(WIZ_LEFT_QUARTER_IP, R, G, B);
+        }
+
+        // Right quarter: x = side-qw .. side-1
+        cv::Mat rightQ = square(cv::Rect(side - qw, 0, qw, side));
+        cv::Mat right1x1;
+        cv::resize(rightQ, right1x1, cv::Size(1, 1), 0, 0, cv::INTER_AREA);
+        {
+            const cv::Vec3b bgr = right1x1.at<cv::Vec3b>(0, 0);
+            uint8_t R = bgr[2], G = bgr[1], B = bgr[0];
+            if (!_lut.empty()) { R = _lut[R]; G = _lut[G]; B = _lut[B]; }
+            sendWiZColor(WIZ_RIGHT_QUARTER_IP, R, G, B);
+        }
     }
 }
 
