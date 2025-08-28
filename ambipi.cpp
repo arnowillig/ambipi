@@ -1345,16 +1345,10 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
 		g = 1;
 		b = 0;
 	}
-    // LEFT: apply signed offset (negative = move up, positive = move down)
-    // Previous mapping used +3; user reports it's 4 LEDs off in the other direction.
-    // Use -1 here (i.e., opposite direction by 4 from +3).
-    constexpr int kLeftShift = -1;
-    for (int i = 0; i < LEDS_LEFT; ++i) {
+    for (int i = 1; i < LEDS_LEFT; ++i) {
         c = _colorsL.at<cv::Vec3b>(cv::Point(0, i));
-        const int dest = i + kLeftShift;
-        if (dest >= 0 && dest < LEDS_LEFT) {
-            setColorLeft(dest, c[r], c[g], c[b]);
-        }
+        const int dest = i - 1;
+        setColorLeft(dest, c[r], c[g], c[b]);
     }
     // --- Bottom interior (exclude corners) ---
     for (int i = 0; i < bot; ++i) {
@@ -1417,10 +1411,9 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
     setColorBottom(LEDS_BOTTOM-1, BR[r], BR[g], BR[b]);
     setColorRight(LEDS_RIGHT-1,   BR[r], BR[g], BR[b]);
 
-    if (LEDS_BOTTOM > 1) {
-        // Set second bottom-left LED to the exact corner color
-        setColorBottom(1, BL[r], BL[g], BL[b]);
-    }
+    // Set second bottom-left LED to the exact corner color
+    setColorLeft(LEDS_LEFT-2, BL[r], BL[g], BL[b]);
+    setColorLeft(LEDS_LEFT-3, BL[r], BL[g], BL[b]);    
 }
 #endif
 
