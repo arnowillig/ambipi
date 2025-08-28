@@ -1329,7 +1329,7 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
     // Downsample edge regions into 1D strips (INTER_AREA is fast and good for downscaling)
     cv::resize(frame(cv::Rect(0,            0,          frame.cols, dh)), colorsTopNew,    cv::Size(top,  1), 0, 0, cv::INTER_AREA);
     cv::resize(frame(cv::Rect(0,  frame.rows - dh,      frame.cols, dh)), colorsBottomNew, cv::Size(bot,  1), 0, 0, cv::INTER_AREA);
-    cv::resize(frame(cv::Rect(0,            0,                    dw, frame.rows)), colorsLeftNew,  cv::Size(1, left),  0, 0, cv::INTER_AREA);
+    cv::resize(frame(cv::Rect(0,            0,          dw, frame.rows)), colorsLeftNew,  cv::Size(1, left),  0, 0, cv::INTER_AREA);
     cv::resize(frame(cv::Rect(frame.cols - dw, 0,       dw, frame.rows)), colorsRightNew, cv::Size(1, right), 0, 0, cv::INTER_AREA);
 
     // Exponential smoothing of strips into persistent members
@@ -1376,7 +1376,7 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
     // --- Corners: average of adjacent strip ends ---
     const cv::Vec3b TL = (pT[0]       + pL[0])        * 0.5;
     const cv::Vec3b TR = (pT[top-1]   + pR[0])        * 0.5;
-    const cv::Vec3b BL = (pB[0]       + pL[left-1])   * 0.5;
+    const cv::Vec3b BL = (pB[0]       + pL[left-2])   * 0.5;
     const cv::Vec3b BR = (pB[bot-1]   + pR[right-1])  * 0.5;
 
     setColorTop(0,              TL[r], TL[g], TL[b]);
