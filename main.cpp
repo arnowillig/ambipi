@@ -197,9 +197,9 @@ int main(int argc, char *argv[])
 					}
 					if (ambiPi.getEnableGameWallAmbilight()) {
 						ambiPi.calculateGameWallFrameFromFrame(frame);
-						ambiPi.calculateKickerLightsFromFrame(frame);
+						//ambiPi.calculateKickerLightsFromFrame(frame);
 					}
-					sleep = 10;
+					sleep = 40;
 				}
 			}
 			break;
@@ -223,7 +223,7 @@ int main(int argc, char *argv[])
 		fps++;
 		time_t t2 = time(NULL);
 		if (t != t2) {
-			fprintf(stderr, "FPS: %d\n",fps);
+			// fprintf(stderr, "FPS: %d\n",fps);
 			t = t2;
 			fps = 0;
 			if (secs++%2==0 || true) {

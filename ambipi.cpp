@@ -1245,6 +1245,7 @@ void AmbiPi::calculateGameWallFrameFromFrame(cv::Mat frame)
 
     cv::Mat targetFrame;
     cv::resize(frame, targetFrame, cv::Size(6, 4), 0, 0, interpolation);
+    cv::flip(targetFrame, targetFrame, 1); // Mirror horizontally
 
     sendFrameToGameWall(targetFrame);
 }
