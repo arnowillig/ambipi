@@ -123,7 +123,14 @@ void RESTServer::getStaticHTML(const Rest::Request& request, Http::ResponseWrite
 		return;
 	}
 	if (request.resource().find("/static/", 0) == 0) {
-		Http::serveFile(response, _basePath + request.resource().substr(7));
+		const std::string rel = request.resource().substr(7);
+		// Reject path traversal: never let a request escape _basePath.
+		if (rel.find("..") != std::string::npos) {
+			response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+			response.send(Http::Code::Forbidden);
+			return;
+		}
+		Http::serveFile(response, _basePath + rel);
 		return;
 	}
 	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");

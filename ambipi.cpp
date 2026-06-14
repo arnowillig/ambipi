@@ -130,6 +130,7 @@ AmbiPi::~AmbiPi()
 
 void AmbiPi::clearLastFrame(uint8_t r,uint8_t g,uint8_t b)
 {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	setLastFrame(cv::Mat(480, 720, CV_8UC3, cv::Scalar(b,g,r)));
 	_cropRect = cv::Rect(0, 0, 720, 480);
 }
@@ -172,38 +173,45 @@ bool AmbiPi::init(double gamma)
 
 void AmbiPi::setUpdateCropRect(bool cropping)
 {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	_enableCropping = cropping;
 }
 
 bool AmbiPi::croppingEnabled() const
 {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	return _enableCropping;
 }
 
 void AmbiPi::setBrightness(uint8_t bri)
 {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	_ws2811->channel[0].brightness	= bri;
 	_ws2811->channel[1].brightness	= bri;
 }
 
 uint8_t AmbiPi::brightness() const
 {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	return _ws2811->channel[0].brightness;
 }
 
 void AmbiPi::setAlpha(double alpha)
 {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	_alpha = alpha;
 }
 
 double AmbiPi::alpha() const
 {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	return _alpha;
 }
 
 
 void AmbiPi::setGamma(double gamma)
 {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	_gamma = gamma;
 	if (gamma != 0) {
 		ws2811_set_custom_gamma_factor(_ws2811, gamma);
@@ -213,6 +221,7 @@ void AmbiPi::setGamma(double gamma)
 
 double AmbiPi::gamma() const
 {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	return _gamma;
 }
 
@@ -223,6 +232,7 @@ void AmbiPi::clear()
 
 void AmbiPi::setColor(uint8_t r, uint8_t g, uint8_t  b)
 {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	setColorLeft(r,g,b);
 	setColorTop(r,g,b);
 	setColorBottom(r,g,b);
@@ -328,6 +338,7 @@ void AmbiPi::getRainbowColor(int pos, uint8_t& r, uint8_t& g, uint8_t& b)
 
 int AmbiPi::drawTestPattern(int i)
 {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	uint8_t r,g,b;
 	uint8_t pos = (i/10);
 	getRainbowColor(pos, r, g, b);
@@ -350,6 +361,7 @@ int AmbiPi::ledCount() const
 
 int AmbiPi::knightrider(int cnt)
 {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	// clear();
 	int p = (1+sin(cnt*M_PI/90.)) * 0.5 * (LEDS_TOP-1);
 	
@@ -369,6 +381,7 @@ int AmbiPi::knightrider(int cnt)
 
 int AmbiPi::vegas(int cnt)
 {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	int c = ledCount();
 	uint8_t r,g,b;
 	for (int i = 0; i<c; i++) {
@@ -395,6 +408,7 @@ int AmbiPi::vegas(int cnt)
 
 int AmbiPi::goal(int cnt, bool leftSide)
 {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	// BottomMid to Left To Top to TopMid
 	uint8_t r,g,b, pos;
 	int lc = ledCount();
@@ -436,6 +450,7 @@ void AmbiPi::fadeColors(float pct)
 
 int AmbiPi::rainbow(int cnt)
 {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	int c = ledCount();
 	uint8_t r,g,b;
 	for (int i = 0; i<c; i++) {
@@ -531,45 +546,60 @@ bool sendWledDnRgbRange(const char* host, const char* port, uint16_t startIndex,
     packet.push_back(static_cast<uint8_t>(startIndex & 0xFF));
     packet.insert(packet.end(), rgb_values.begin(), rgb_values.end());
 
-    struct addrinfo hints{};
-    struct addrinfo* res = nullptr;
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_DGRAM;
+    // Resolve the destination once and cache it: getaddrinfo() per frame is
+    // expensive and was previously called on every render tick.
+    static std::mutex s_addrCacheMutex;
+    static std::unordered_map<std::string, std::pair<sockaddr_storage, socklen_t>> s_addrCache;
 
-    int rc = getaddrinfo(host, port, &hints, &res);
-    if (rc != 0) {
-        std::cerr << "[ERROR] getaddrinfo fehlgeschlagen: " << gai_strerror(rc) << "\n";
-        return false;
+    sockaddr_storage dest{};
+    socklen_t destLen = 0;
+    {
+        const std::string key = std::string(host) + ":" + port;
+        std::lock_guard<std::mutex> lk(s_addrCacheMutex);
+        auto it = s_addrCache.find(key);
+        if (it != s_addrCache.end()) {
+            dest    = it->second.first;
+            destLen = it->second.second;
+        } else {
+            struct addrinfo hints{};
+            struct addrinfo* res = nullptr;
+            hints.ai_family = AF_UNSPEC;
+            hints.ai_socktype = SOCK_DGRAM;
+            int rc = getaddrinfo(host, port, &hints, &res);
+            if (rc != 0 || res == nullptr) {
+                std::cerr << "[ERROR] getaddrinfo fehlgeschlagen: " << gai_strerror(rc) << "\n";
+                if (res) freeaddrinfo(res);
+                return false;
+            }
+            std::memcpy(&dest, res->ai_addr, res->ai_addrlen);
+            destLen = static_cast<socklen_t>(res->ai_addrlen);
+            freeaddrinfo(res);
+            s_addrCache.emplace(key, std::make_pair(dest, destLen));
+        }
     }
-    int sock = -1;
-    struct addrinfo* p;
-    for (p = res; p != nullptr; p = p->ai_next) {
-        sock = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-        if (sock == -1) continue;
-        break;
-    }
-    if (p == nullptr || sock == -1) {
+
+    int sock = socket(dest.ss_family, SOCK_DGRAM, 0);
+    if (sock == -1) {
         std::cerr << "[ERROR] Konnte keinen Socket erzeugen.\n";
-        freeaddrinfo(res);
         return false;
     }
 
-    ssize_t sent = sendto(sock, packet.data(), packet.size(), 0, p->ai_addr, p->ai_addrlen);
+    ssize_t sent = sendto(sock, packet.data(), packet.size(), 0,
+                          reinterpret_cast<sockaddr*>(&dest), destLen);
     if (sent != (ssize_t)packet.size()) {
         std::cerr << "[ERROR] sendto fehlgeschlagen: " << strerror(errno)
                   << " gesendet: " << sent << " von " << packet.size() << "\n";
         close(sock);
-        freeaddrinfo(res);
         return false;
     }
 
     close(sock);
-    freeaddrinfo(res);
     return true;
 }
 
 void AmbiPi::render()
 {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 #ifdef _GUI_
 	return;
 #endif
@@ -666,6 +696,7 @@ if (_enableGamingTable) {
 
 cv::Mat AmbiPi::getDebugFrame(cv::Mat frame) const
 {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	int top   = LEDS_TOP     - 2;
 	int left  = LEDS_LEFT    - 2;
 
@@ -774,6 +805,7 @@ cv::Mat AmbiPi::createTestImage(int w, int h)
 
 void AmbiPi::updateCropRect(cv::Mat frame)
 {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	fprintf(stderr, "updateCropRect(%dx%d)\n", frame.cols, frame.rows);
 	int minX = 0;
 	int minY = 0;
@@ -833,6 +865,7 @@ void AmbiPi::updateCropRect(cv::Mat frame)
 
 cv::Mat AmbiPi::cropBorders(cv::Mat frame, bool debug) const
 {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	cv::Mat cropped = frame(_cropRect);
 	cv::Mat out;
 	
@@ -859,6 +892,7 @@ cv::Mat AmbiPi::cropBorders(cv::Mat frame, bool debug) const
 
 void AmbiPi::calculateDisplayFrameFromFrame(cv::Mat frame)
 {
+    std::lock_guard<std::recursive_mutex> lock(_mutex);
     // Horizontal correction factor (stretch); 1.0 = off.
     // Increase if the input looks horizontally compressed.
     // Tweak this value to your setup (e.g. 1.10 .. 1.40).
@@ -1237,6 +1271,7 @@ void AmbiPi::sendFrameToGameWall(const cv::Mat& resized6x4BGR)
 
 void AmbiPi::calculateGameWallFrameFromFrame(cv::Mat frame)
 {
+    std::lock_guard<std::recursive_mutex> lock(_mutex);
     if (!_enableGameWallAmbilight) return;
     int w = frame.cols;
     int h = frame.rows;
@@ -1252,6 +1287,7 @@ void AmbiPi::calculateGameWallFrameFromFrame(cv::Mat frame)
 
 void AmbiPi::calculateKickerLightsFromFrame(cv::Mat frame)
 {
+    std::lock_guard<std::recursive_mutex> lock(_mutex);
     // Use the same toggle unless you want a dedicated one later
     if (!_enableGameWallAmbilight) return;
 
@@ -1357,6 +1393,7 @@ bool AmbiPi::sendKDPDatagram(const uint8_t* data, size_t size)
 
 void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
 {
+    std::lock_guard<std::recursive_mutex> lock(_mutex);
     // Dimensions excluding the physical LED corners
     const int top   = LEDS_TOP    - 2;
     const int bot   = LEDS_BOTTOM - 2;
@@ -1463,30 +1500,36 @@ cv::Mat AmbiPi::lastFrame() const
 
 bool AmbiPi::getEnableDisplayVideo() const
 {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	return _enableDisplayVideo;
 }
 
 void AmbiPi::setEnableDisplayVideo(bool enableDisplayVideo)
 {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	_enableDisplayVideo = enableDisplayVideo;
 }
 
 bool AmbiPi::getEnableGamingTable() const
 {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	return _enableGamingTable;
 }
 
 void AmbiPi::setEnableGamingTable(bool enableGamingTable)
 {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	_enableGamingTable = enableGamingTable;
 }
 
 bool AmbiPi::getEnableGameWallAmbilight() const
 {
+    std::lock_guard<std::recursive_mutex> lock(_mutex);
     return _enableGameWallAmbilight;
 }
 
 void AmbiPi::setEnableGameWallAmbilight(bool enable)
 {
+    std::lock_guard<std::recursive_mutex> lock(_mutex);
     _enableGameWallAmbilight = enable;
 }

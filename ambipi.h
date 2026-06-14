@@ -38,8 +38,8 @@ public:
 	void setFrameBuffer(FrameBuffer* fb) { _fb = fb; }
 	FrameBuffer* frameBuffer() const { return _fb; }
 	
-	void setMode(Mode m) { _mode = m; }
-	Mode mode() const { return _mode; }
+	void setMode(Mode m) { std::lock_guard<std::recursive_mutex> lock(_mutex); _mode = m; }
+	Mode mode() const { std::lock_guard<std::recursive_mutex> lock(_mutex); return _mode; }
 
 	bool init(double gamma);
 	void clearLastFrame(uint8_t r,uint8_t g,uint8_t b);
@@ -114,7 +114,7 @@ private:
 	Mode _mode;
 	double _alpha;
 	double _gamma;
-	mutable std::mutex _mutex;
+	mutable std::recursive_mutex _mutex;
 	cv::Mat _lastFrame;
 	bool _enableCropping;
 	bool _enableDisplayVideo;
