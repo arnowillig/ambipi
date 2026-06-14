@@ -90,7 +90,7 @@ void RESTServer::handlePost(const Rest::Request& request, Http::ResponseWriter r
 		int b = color[2];
 		_ambiPi->setMode(AmbiPi::Color);
 		_ambiPi->setColor(r,g,b);	
-		if (r==0 && g==0 & b==255) { //
+		if (r==0 && g==0 && b==255) { //
 			_ambiPi->setMode(AmbiPi::AmbiLight);
 		}
 	} else if (cmd == "SetColorTemperature") {

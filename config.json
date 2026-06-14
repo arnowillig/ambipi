@@ -1,0 +1,14 @@
+{
+  "display_server": "192.168.178.46",
+  "display_port": 14000,
+  "display_prio": 130,
+  "ddp_host_right": "192.168.178.146",
+  "ddp_host_left": "192.168.178.185",
+  "ddp_port": 4048,
+  "table_host": "192.168.178.150",
+  "table_port": "21324",
+  "wiz_port": 38899,
+  "wiz_ips": ["192.168.178.80", "192.168.178.87", "192.168.178.50", "192.168.178.53"],
+  "wiz_left_quarter_ip": "192.168.178.109",
+  "wiz_right_quarter_ip": "192.168.178.127"
+}

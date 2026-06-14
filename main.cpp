@@ -73,14 +73,12 @@ int main(int argc, char *argv[])
 	std::thread restThread(&restServer, &server);
 
 	cv::Mat frame;
-	ambiPi.setMode(AmbiPi::AmbiLight);
 	ambiPi.setMode(AmbiPi::White);
 	AmbiPi::Mode lastMode = ambiPi.mode();
-	
+
 	cv::VideoCapture* capture = nullptr;
-	
+
 	time_t t = time(NULL);
-	int secs = 0;
 	int fps = 0;
 	int sleep;
 	int cnt = 0;
@@ -94,12 +92,7 @@ int main(int argc, char *argv[])
 		switch (ambiPi.mode()) {
 		case AmbiPi::Off:
 			ambiPi.setColor(0,0,0);
-			//if (lastMode != AmbiPi::Off) {
-			//	ambiPi.render();
-			// }
-			// usleep(100*1000);
 			sleep = 100;
-			// continue;
 			break;
 		case AmbiPi::White:
 			sleep = 100;
@@ -176,22 +169,7 @@ int main(int argc, char *argv[])
 					capture = nullptr;
 					sleep = 100;
 				} else {
-					// cv::convert(frame, frame, cv::COLOR_BGR2RGB);
-					// int interpolation = cv::INTER_LINEAR; // INTER_CUBIC
-					// cv::resize(frame, frame, cv::Size(720,480), 0, 0, cv::INTER_LINEAR);
-/*					static int x = 0;
-					if (++x=100) {
-						imwrite("/home/pi/test.jpg", frame);
-					}
-*/					
 					ambiPi.setLastFrame(frame);
-/*					
-					if (ambiPi.croppingEnabled()) {
-						ambiPi.updateCropRect(frame);
-						ambiPi.setUpdateCropRect(false);
-					}
-					frame = ambiPi.cropBorders(frame, false);
-*/					
 					ambiPi.calculateAmbilightFromFrame(frame);
 					if (ambiPi.getEnableDisplayVideo()) {
 						ambiPi.calculateDisplayFrameFromFrame(frame);
@@ -211,11 +189,7 @@ int main(int argc, char *argv[])
 #ifdef _GUI_
 		ambiPi.drawGUI(frame);
 #else
-		// fb.drawFrame(frame);
-		// drawToDispManX(frame);
-//		if ((ambiPi.mode() != AmbiPi::Off)) {
-			ambiPi.render();
-//		}
+		ambiPi.render();
 #endif
 		if (sleep>0) {
 			usleep(1000*sleep);
@@ -224,12 +198,9 @@ int main(int argc, char *argv[])
 		fps++;
 		time_t t2 = time(NULL);
 		if (t != t2) {
-			// fprintf(stderr, "FPS: %d\n",fps);
 			t = t2;
 			fps = 0;
-			if (secs++%2==0 || true) {
-				ambiPi.setUpdateCropRect(true);
-			}
+			ambiPi.setUpdateCropRect(true);
 		}
 #ifdef _GUI_
 		int key = cv::waitKey(10);

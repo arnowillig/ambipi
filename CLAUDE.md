@@ -19,6 +19,10 @@ the LAN (a "GameWall" of WLED shelves, a gaming table, a 32×32 display, WiZ bul
 - Several **absolute paths are hardcoded** for the Pi: `/home/pi/src/ambipi/html`,
   `/home/pi/src/ambipi/gamewall/public/shelves.json`, screenshot at `/home/pi/screenshot.png`,
   test video `/home/pi/Videos/big_buck_bunny_1080p_surround.avi`.
+- **`config.json`** (optional, `/home/pi/src/ambipi/config.json`, loaded in `AmbiPi::init` via
+  `loadNetworkConfig`) overrides the LAN network targets (display/DDP/table/WiZ hosts & ports).
+  If missing/unparsable, the built-in defaults (`struct NetConfig g_net` in `ambipi.cpp`) are used —
+  identical to the committed `config.json`. LED geometry stays compile-time (`#define LEDS_*`).
 
 ## Top-level layout
 
@@ -122,6 +126,8 @@ Mostly `GET` "set" endpoints (path params), plain-text responses, CORS `*`:
 | Gaming table WLED | `192.168.178.150:21324` | WLED DNRGB |
 | 32×32 Display | `192.168.178.46:14000` | custom KDP |
 | WiZ bulbs | `192.168.178.{80,87,50,53,109,127}:38899` | WiZ JSON UDP |
+
+All addresses above are defaults in `NetConfig` and overridable via `config.json`.
 
 ## Gotchas
 

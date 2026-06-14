@@ -30,19 +30,34 @@
 #define WS2811_DMA              10
 #define MAX_BRIGHTNESS		255
 
+// --- Network targets ---------------------------------------------------------
+// All LAN endpoints live here and can be overridden at runtime via
+// /home/pi/src/ambipi/config.json (see loadNetworkConfig()). If that file is
+// missing or unparsable, these built-in defaults are used unchanged.
+struct NetConfig {
+    // 32x32 "KDP" display
 #ifdef DEVEL
-#define DISPLAY_SERVER "127.0.0.1"
+    std::string displayServer = "127.0.0.1";
 #else
-#define DISPLAY_SERVER "192.168.178.46"
+    std::string displayServer = "192.168.178.46";
 #endif
-#define DISPLAY_PORT 14000
-#define DISPLAY_PRIO 0x82
-
-
-
-static const char* DDP_HOST_RIGHT = "192.168.178.146"; // shelves 1..24
-static const char* DDP_HOST_LEFT  = "192.168.178.185"; // shelves 25..40
-static const uint16_t DDP_PORT    = 4048;
+    int displayPort = 14000;
+    int displayPrio = 0x82;
+    // GameWall DDP boards
+    std::string ddpHostRight = "192.168.178.146"; // shelves 1..24
+    std::string ddpHostLeft  = "192.168.178.185"; // shelves 25..40
+    int         ddpPort      = 4048;
+    // Gaming table (WLED DNRGB)
+    std::string tableHost = "192.168.178.150";
+    std::string tablePort = "21324";
+    // WiZ bulbs
+    int                      wizPort = 38899;
+    std::vector<std::string> wizIps  = { "192.168.178.80", "192.168.178.87",
+                                         "192.168.178.50", "192.168.178.53" };
+    std::string wizLeftQuarterIp  = "192.168.178.109";
+    std::string wizRightQuarterIp = "192.168.178.127";
+};
+static NetConfig g_net;
 static constexpr uint8_t DDP_FLAG_VERSION1  = 0x40; // version=1 (bits 6..7)
 static constexpr uint8_t DDP_FLAG_PUSH      = 0x01; // push frame immediately
 static constexpr uint8_t DDP_FLAGS          = DDP_FLAG_VERSION1 | DDP_FLAG_PUSH;
@@ -85,6 +100,36 @@ static bool loadShelvesFromJson()
         return true;
     } catch (const std::exception& e) {
         std::cerr << "[ERROR] shelves.json parse error: " << e.what() << "\n"; return false;
+    }
+}
+
+// Override the built-in network defaults from a JSON file (all keys optional).
+static void loadNetworkConfig()
+{
+    const char* path = "/home/pi/src/ambipi/config.json";
+    std::ifstream ifs(path);
+    if (!ifs) {
+        std::cerr << "[INFO] " << path << " not found — using built-in network defaults\n";
+        return;
+    }
+    try {
+        nlohmann::json j; ifs >> j;
+        g_net.displayServer     = j.value("display_server",       g_net.displayServer);
+        g_net.displayPort       = j.value("display_port",         g_net.displayPort);
+        g_net.displayPrio       = j.value("display_prio",         g_net.displayPrio);
+        g_net.ddpHostRight      = j.value("ddp_host_right",       g_net.ddpHostRight);
+        g_net.ddpHostLeft       = j.value("ddp_host_left",        g_net.ddpHostLeft);
+        g_net.ddpPort           = j.value("ddp_port",             g_net.ddpPort);
+        g_net.tableHost         = j.value("table_host",           g_net.tableHost);
+        g_net.tablePort         = j.value("table_port",           g_net.tablePort);
+        g_net.wizPort           = j.value("wiz_port",             g_net.wizPort);
+        if (j.contains("wiz_ips") && j["wiz_ips"].is_array())
+            g_net.wizIps = j["wiz_ips"].get<std::vector<std::string>>();
+        g_net.wizLeftQuarterIp  = j.value("wiz_left_quarter_ip",  g_net.wizLeftQuarterIp);
+        g_net.wizRightQuarterIp = j.value("wiz_right_quarter_ip", g_net.wizRightQuarterIp);
+        std::cerr << "[INFO] Loaded network config from " << path << "\n";
+    } catch (const std::exception& e) {
+        std::cerr << "[ERROR] config.json parse error: " << e.what() << " — using defaults\n";
     }
 }
 
@@ -137,6 +182,7 @@ void AmbiPi::clearLastFrame(uint8_t r,uint8_t g,uint8_t b)
 
 bool AmbiPi::init(double gamma)
 {
+	loadNetworkConfig();
 	_ws2811 = (ws2811_t *) malloc(sizeof(ws2811_t));
 	memset(_ws2811, 0, sizeof(ws2811_t));
 
@@ -605,9 +651,9 @@ void AmbiPi::render()
 #endif
 	// ws2811_wait(_ws2811);
 	ws2811_render(_ws2811);
-if (_enableGamingTable) {	
-    const char* host = "192.168.178.150";
-    const char* port = "21324";
+if (_enableGamingTable) {
+    const char* host = g_net.tableHost.c_str();
+    const char* port = g_net.tablePort.c_str();
 #if 0
     {
     // Schrank
@@ -787,13 +833,9 @@ cv::Mat AmbiPi::createTestImage(int w, int h)
 	for  (int y=0; y<LEDS_LEFT; y++) {
 		for (int x=0; x<LEDS_TOP; x++) {
 			if ((x/d%2)^(y/d%2)) {
-				frame.at<std::array<uint8_t,3>>(y,x)[0] = 0*rand() % 256;
-				frame.at<std::array<uint8_t,3>>(y,x)[1] = 0*rand() % 256;
-				frame.at<std::array<uint8_t,3>>(y,x)[2] = 0xff; // rand() % 256;
+				frame.at<cv::Vec3b>(y,x) = cv::Vec3b(0, 0, 0xff);
 			} else {
-				frame.at<std::array<uint8_t,3>>(y,x)[0] = 0xff;
-				frame.at<std::array<uint8_t,3>>(y,x)[1] = 0;
-				frame.at<std::array<uint8_t,3>>(y,x)[2] = 0;
+				frame.at<cv::Vec3b>(y,x) = cv::Vec3b(0xff, 0, 0);
 			}
 		}
 	}
@@ -1047,55 +1089,7 @@ static void buildLedBuffersFromFrame(const cv::Mat& targetFrame,
   }
 }
 
-// Send a single DDP packet (offset 0) containing the entire LED buffer.
-/*
-static bool sendDDP(const std::vector<uint8_t>& rgb)
-{
-  int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-  if (sockfd < 0) {
-    return false;
-  }
-
-  sockaddr_in addr{};
-  addr.sin_family = AF_INET;
-  addr.sin_port = htons(DDP_PORT);
-  addr.sin_addr.s_addr = inet_addr(DDP_HOST);
-
-  // Build DDP header (10 bytes)
-  std::vector<uint8_t> packet;
-  packet.resize(DDP_HEADER_LEN + rgb.size());
-
-  // Byte 0: flags (version=1 + push)
-  packet[0] = DDP_FLAGS;
-  // Byte 1: sequence (0..255) – you can increment if you want; 0 is fine
-  packet[1] = 0;
-  // Byte 2: data type (RGB)
-  packet[2] = DDP_DATATYPE_RGB;
-  // Byte 3: reserved
-  packet[3] = 0;
-
-  // Bytes 4..7: channel offset (big endian) – we start at 0
-  packet[4] = 0; packet[5] = 0; packet[6] = 0; packet[7] = 0;
-
-  // Bytes 8..9: data length (big endian) – number of channel bytes
-  const uint16_t dataLen = static_cast<uint16_t>(rgb.size());
-  packet[8] = static_cast<uint8_t>((dataLen >> 8) & 0xFF);
-  packet[9] = static_cast<uint8_t>( dataLen       & 0xFF);
-
-  // Payload
-  std::memcpy(packet.data() + DDP_HEADER_LEN, rgb.data(), rgb.size());
-
-  ssize_t sent = sendto(sockfd, reinterpret_cast<const char*>(packet.data()),
-                        static_cast<int>(packet.size()), 0,
-                        reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
-
-  close(sockfd);
-
-  return sent == static_cast<ssize_t>(packet.size());
-}
-*/
-
-
+// Send a DDP stream (chunked) to host:port containing the whole LED buffer.
 static bool sendDDP(const char* host, uint16_t port, const std::vector<uint8_t>& rgb)
 {
     if (rgb.empty())
@@ -1186,19 +1180,7 @@ static bool sendDDP(const char* host, uint16_t port, const std::vector<uint8_t>&
     return true;
 }
 
-// --- WiZ local UDP sender (port 38899) ---
-static constexpr uint16_t WIZ_PORT = 38899;
-static const std::array<const char*,4> WIZ_IPS = {
-    "192.168.178.80",
-    "192.168.178.87",
-    "192.168.178.50",
-    "192.168.178.53"
-};
-
-// Extra single-bulb samples (quarter-based)
-static const char* WIZ_RIGHT_QUARTER_IP = "192.168.178.127"; // right side
-static const char* WIZ_LEFT_QUARTER_IP  = "192.168.178.109"; // left side
-
+// --- WiZ local UDP sender (host/port/IPs configured via g_net) ---
 static void sendWiZColor(const char* ip, uint8_t r, uint8_t g, uint8_t b)
 {
     // {"method":"setPilot","params":{"state":true,"r":R,"g":G,"b":B}}
@@ -1213,7 +1195,7 @@ static void sendWiZColor(const char* ip, uint8_t r, uint8_t g, uint8_t b)
 
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
-    addr.sin_port   = htons(WIZ_PORT);
+    addr.sin_port   = htons(static_cast<uint16_t>(g_net.wizPort));
     if (::inet_pton(AF_INET, ip, &addr.sin_addr) != 1) { ::close(sock); return; }
 
     (void)::sendto(sock, payload, n, 0, (sockaddr*)&addr, sizeof(addr));
@@ -1264,8 +1246,8 @@ void AmbiPi::sendFrameToGameWall(const cv::Mat& resized6x4BGR)
     lastFrame_.insert(lastFrame_.end(), leftCurr.begin(), leftCurr.end());
 
     // Send via DDP to each board
-    if (!rightCurr.empty()) (void)sendDDP(DDP_HOST_RIGHT, DDP_PORT, rightCurr);
-    if (!leftCurr.empty())  (void)sendDDP(DDP_HOST_LEFT,  DDP_PORT, leftCurr);
+    if (!rightCurr.empty()) (void)sendDDP(g_net.ddpHostRight.c_str(), static_cast<uint16_t>(g_net.ddpPort), rightCurr);
+    if (!leftCurr.empty())  (void)sendDDP(g_net.ddpHostLeft.c_str(),  static_cast<uint16_t>(g_net.ddpPort), leftCurr);
 }
 
 
@@ -1316,7 +1298,8 @@ void AmbiPi::calculateKickerLightsFromFrame(cv::Mat frame)
         uint8_t B = bgr[0];
         // optional gamma correction using LUT if configured
         if (!_lut.empty()) { R = _lut[R]; G = _lut[G]; B = _lut[B]; }
-        sendWiZColor(WIZ_IPS[3-i], R, G, B);
+        const size_t wizIdx = static_cast<size_t>(3 - i);
+        if (wizIdx < g_net.wizIps.size()) sendWiZColor(g_net.wizIps[wizIdx].c_str(), R, G, B);
     }
 
     // --- Extra two bulbs: sample left/right quarters (25% width each, full height) ---
@@ -1331,7 +1314,7 @@ void AmbiPi::calculateKickerLightsFromFrame(cv::Mat frame)
             const cv::Vec3b bgr = left1x1.at<cv::Vec3b>(0, 0);
             uint8_t R = bgr[2], G = bgr[1], B = bgr[0];
             if (!_lut.empty()) { R = _lut[R]; G = _lut[G]; B = _lut[B]; }
-            sendWiZColor(WIZ_LEFT_QUARTER_IP, R, G, B);
+            sendWiZColor(g_net.wizLeftQuarterIp.c_str(), R, G, B);
         }
 /*
         // Right quarter: x = side-qw .. side-1
@@ -1342,7 +1325,7 @@ void AmbiPi::calculateKickerLightsFromFrame(cv::Mat frame)
             const cv::Vec3b bgr = right1x1.at<cv::Vec3b>(0, 0);
             uint8_t R = bgr[2], G = bgr[1], B = bgr[0];
             if (!_lut.empty()) { R = _lut[R]; G = _lut[G]; B = _lut[B]; }
-            sendWiZColor(WIZ_RIGHT_QUARTER_IP, R, G, B);
+            sendWiZColor(g_net.wizRightQuarterIp.c_str(), R, G, B);
         }
 */
     }
@@ -1356,7 +1339,7 @@ bool AmbiPi::sendFullFrame(cv::Mat frame)
 	buf[1] = 'D';
 	buf[2] = (uint8_t) ((size>>8) & 0xff);
 	buf[3] = (uint8_t) ((size>>0) & 0xff);
-	buf[4] = DISPLAY_PRIO; // PRIO
+	buf[4] = (uint8_t) g_net.displayPrio; // PRIO
 	buf[5] = 25;   // TTL
 	buf[6] = 0;    // TYPE
 	buf[7] = 0;    // SECT
@@ -1377,8 +1360,8 @@ bool AmbiPi::sendKDPDatagram(const uint8_t* data, size_t size)
 
 	memset(&servaddr, 0, sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
-	servaddr.sin_addr.s_addr = inet_addr(DISPLAY_SERVER);
-	servaddr.sin_port = htons(DISPLAY_PORT);
+	servaddr.sin_addr.s_addr = inet_addr(g_net.displayServer.c_str());
+	servaddr.sin_port = htons(static_cast<uint16_t>(g_net.displayPort));
 	int len = sendto(fd, data, size, 0, (sockaddr*)&servaddr, sizeof(servaddr));
 	if (len < 0) {
 		perror("Cannot send message");
