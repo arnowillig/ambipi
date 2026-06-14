@@ -74,7 +74,8 @@ int main(int argc, char *argv[])
 
 	cv::Mat frame;
 	ambiPi.setMode(AmbiPi::AmbiLight);
-	AmbiPi::Mode lastMode = AmbiPi::AmbiLight;
+	ambiPi.setMode(AmbiPi::White);
+	AmbiPi::Mode lastMode = ambiPi.mode();
 	
 	cv::VideoCapture* capture = nullptr;
 	

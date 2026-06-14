@@ -78,7 +78,7 @@ void RESTServer::handlePost(const Rest::Request& request, Http::ResponseWriter r
 	if (cmd == "TurnOff") {
 		_ambiPi->setMode(AmbiPi::Off);
 	} else if (cmd == "TurnOn") {
-		_ambiPi->setMode(AmbiPi::AmbiLight);
+		_ambiPi->setMode(AmbiPi::White);
 	} else if (cmd == "SetBrightness") {
 		int brightness = jsonBody.value("brightness", 0);
 		int bri = (brightness * 255) / 100;
