@@ -1,7 +1,8 @@
-# Cross-build AmbiPi for Raspberry Pi (armhf / 32-bit Raspberry Pi OS) via Docker.
-# armhf containers run under QEMU emulation on Apple-Silicon/x86 hosts (slower
-# but functional), matching the flow-grid setup.
-FROM arm32v7/debian:bookworm-slim
+# Cross-build AmbiPi for Raspberry Pi (armhf) via Docker.
+# Base must match the target Pi's OS so the runtime deps line up: ataripi runs
+# Raspbian 11 (bullseye) -> glibc 2.31, libstdc++ 10, OpenCV 4.5.
+# armhf containers run under QEMU emulation on Apple-Silicon/x86 hosts.
+FROM arm32v7/debian:bullseye-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       g++ make cmake pkg-config git ca-certificates \
