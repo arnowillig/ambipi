@@ -11,15 +11,24 @@ the LAN (a "GameWall" of WLED shelves, a gaming table, a 32×32 display, WiZ bul
   `pistache` from git submodules, OpenCV via `pkg-config`.
   - `make run` → `sudo ./ambipi` · `make restart` → `sudo service ambipi restart` · `make log` → journalctl.
   - `make clean` / `make distclean` (also wipes submodule build dirs).
+- **Packaged build/deploy (arm64 .deb via Docker):** `make deb` cross-builds inside an
+  `arm64v8/debian:bookworm` container (`Dockerfile.cross`, native on Apple-Silicon hosts) and assembles
+  `dist/ambipi_<ver>_arm64.deb` via `packaging/build-deb.sh` (submodules fetched over HTTPS, deps via
+  `dpkg-shlibdeps`). `make deploy` scp's it to `ataripi.local` and `dpkg -i`. `make docker-clean` drops the image.
+  - The deb installs to FHS paths and ships a systemd unit; its **`preinst` removes the old hand-installed
+    infra** (`/usr/local/bin/ambipi`, `/etc/systemd/system/ambipi.service`). Maintainer scripts +
+    unit live in `packaging/`.
 - **Dev/GUI build:** `ambipi.pro` (qmake). Defines `_GUI_` → LEDs are simulated (no `ws2811_init`),
   frames shown in OpenCV windows via `drawGUI`/`getDebugFrame`, no hardware/network render.
 - **Submodules** (`.gitmodules`): `rpi_ws281x` (arnowillig fork), `pistache`. Run `git submodule update --init`.
 - **Bundled deps:** `json.hpp` (nlohmann, header-only), used by both ambipi and gamewall.
 - **Deploy:** `ambipi.service` runs `/usr/local/bin/ambipi` as root, `WorkingDirectory=/home/pi/src/ambipi`.
-- Several **absolute paths are hardcoded** for the Pi: `/home/pi/src/ambipi/html`,
-  `/home/pi/src/ambipi/gamewall/public/shelves.json`, screenshot at `/home/pi/screenshot.png`,
-  test video `/home/pi/Videos/big_buck_bunny_1080p_surround.avi`.
-- **`config.json`** (optional, `/home/pi/src/ambipi/config.json`, loaded in `AmbiPi::init` via
+- **Runtime file locations (FHS, set by the deb):** web UI `html/` → `/usr/share/ambipi/html`,
+  GameWall shelves → `/usr/share/ambipi/shelves.json`, network config → `/etc/ambipi/config.json`,
+  `WorkingDirectory`/screenshot → `/var/lib/ambipi`. Binary → `/usr/bin/ambipi`. These paths are
+  compiled in (`restserver.cpp` `_basePath`; `loadShelvesFromJson`/`loadNetworkConfig` in `ambipi.cpp`;
+  screenshot in `main.cpp`). Test video default still `/home/pi/Videos/...` (dev only).
+- **`config.json`** (optional, `/etc/ambipi/config.json`, loaded in `AmbiPi::init` via
   `loadNetworkConfig`) overrides the LAN network targets (display/DDP/table/WiZ hosts & ports).
   If missing/unparsable, the built-in defaults (`struct NetConfig g_net` in `ambipi.cpp`) are used —
   identical to the committed `config.json`. LED geometry stays compile-time (`#define LEDS_*`).

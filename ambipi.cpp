@@ -32,7 +32,7 @@
 
 // --- Network targets ---------------------------------------------------------
 // All LAN endpoints live here and can be overridden at runtime via
-// /home/pi/src/ambipi/config.json (see loadNetworkConfig()). If that file is
+// /etc/ambipi/config.json (see loadNetworkConfig()). If that file is
 // missing or unparsable, these built-in defaults are used unchanged.
 struct NetConfig {
     // 32x32 "KDP" display
@@ -74,7 +74,7 @@ static bool G_LOADED = false;
 static bool loadShelvesFromJson()
 {
     if (G_LOADED) return true;
-    const char* path = "/home/pi/src/ambipi/gamewall/public/shelves.json";
+    const char* path = "/usr/share/ambipi/shelves.json";
     std::ifstream ifs(path);
     if (!ifs) { std::cerr << "[ERROR] Cannot open shelves.json: " << path << "\n"; return false; }
     try {
@@ -106,7 +106,7 @@ static bool loadShelvesFromJson()
 // Override the built-in network defaults from a JSON file (all keys optional).
 static void loadNetworkConfig()
 {
-    const char* path = "/home/pi/src/ambipi/config.json";
+    const char* path = "/etc/ambipi/config.json";
     std::ifstream ifs(path);
     if (!ifs) {
         std::cerr << "[INFO] " << path << " not found — using built-in network defaults\n";

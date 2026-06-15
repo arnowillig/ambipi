@@ -132,7 +132,7 @@ int main(int argc, char *argv[])
 			if (screenshot) {
 				cv::Mat out;
 				cv::cvtColor(frame, out, cv::COLOR_RGB2BGR);
-				cv::imwrite("/home/pi/screenshot.png", out);
+				cv::imwrite("/var/lib/ambipi/screenshot.png", out);
 				screenshot = false;
 			}
 			if (!frame.empty()) {

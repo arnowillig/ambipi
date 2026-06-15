@@ -68,3 +68,30 @@ log: $(TARGET)
 	sudo journalctl --vacuum-time=1s -u ambipi.service
 	sudo journalctl --rotate  -u ambipi.service
 	sudo journalctl -u ambipi.service
+
+# --- Cross-build a .deb for the Pi (arm64) via Docker, and deploy ----------
+# Mirrors the flow-grid setup. On an arm64 host the container runs natively.
+DOCKER_IMAGE := ambipi-cross-arm64
+DOCKER_PLAT  := linux/arm64
+DEB_VERSION  ?= 1.0.0
+DEPLOY_HOST  ?= pi@ataripi.local
+
+.PHONY: deb deploy docker-clean
+
+deb:
+	docker build --platform $(DOCKER_PLAT) -t $(DOCKER_IMAGE) -f Dockerfile.cross .
+	docker run --rm --platform $(DOCKER_PLAT) \
+		-v "$(CURDIR)":/src:delegated -w /src \
+		-e DEB_VERSION=$(DEB_VERSION) -e DEB_ARCH=arm64 \
+		$(DOCKER_IMAGE) bash packaging/build-deb.sh
+	@ls -lh dist/*.deb
+
+deploy: deb
+	@DEB=$$(ls -t dist/*.deb | head -1) && \
+		echo "--- Deploying $$DEB to $(DEPLOY_HOST) ---" && \
+		scp "$$DEB" $(DEPLOY_HOST):/tmp/ambipi.deb && \
+		ssh $(DEPLOY_HOST) 'sudo dpkg -i /tmp/ambipi.deb || sudo apt-get -f install -y; rm -f /tmp/ambipi.deb' && \
+		echo "--- Deployed; service restarted by postinst ---"
+
+docker-clean:
+	docker rmi $(DOCKER_IMAGE) 2>/dev/null || true

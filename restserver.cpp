@@ -7,7 +7,7 @@
 
 RESTServer::RESTServer(AmbiPi* ambiPi) : _ambiPi(ambiPi)
 {
-	_basePath = "/home/pi/src/ambipi/html";
+	_basePath = "/usr/share/ambipi/html";
 
 	Rest::Routes::Post(_router, "/api",                     Rest::Routes::bind(&RESTServer::handlePost, this));
 	

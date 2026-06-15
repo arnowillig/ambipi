@@ -1,0 +1,12 @@
+# Cross-build AmbiPi for Raspberry Pi (arm64) on macOS/Apple-Silicon via Docker.
+# On an arm64 host these containers run natively (fast); on x86 they run under
+# QEMU emulation (slow but functional).
+FROM arm64v8/debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      g++ make cmake pkg-config git ca-certificates \
+      libopencv-dev libssl-dev rapidjson-dev nlohmann-json3-dev \
+      dpkg-dev binutils file \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src

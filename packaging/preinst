@@ -1,0 +1,22 @@
+#!/bin/sh
+set -e
+
+# Clean up the old, hand-installed service infrastructure (pre-deb era):
+#   - binary lived at /usr/local/bin/ambipi
+#   - unit was copied to /etc/systemd/system/ambipi.service (overrides the
+#     packaged /lib unit) and ran with WorkingDirectory=/home/pi/src/ambipi
+# This runs on both fresh install and upgrade; all steps are idempotent.
+
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl stop ambipi.service 2>/dev/null || true
+fi
+
+rm -f /etc/systemd/system/ambipi.service
+rm -f /etc/systemd/system/multi-user.target.wants/ambipi.service
+rm -f /usr/local/bin/ambipi
+
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl daemon-reload 2>/dev/null || true
+fi
+
+exit 0

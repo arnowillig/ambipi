@@ -1,0 +1,16 @@
+[Unit]
+Description=AmbiPi Ambilight Controller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/ambipi
+Restart=always
+RestartSec=2
+User=root
+WorkingDirectory=/var/lib/ambipi
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+#!/bin/sh
+set -e
+
+mkdir -p /var/lib/ambipi
+
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl daemon-reload || true
+  systemctl enable ambipi.service || true
+  systemctl restart ambipi.service || true
+fi
+
+exit 0
