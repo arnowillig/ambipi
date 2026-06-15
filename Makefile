@@ -69,10 +69,11 @@ log: $(TARGET)
 	sudo journalctl --rotate  -u ambipi.service
 	sudo journalctl -u ambipi.service
 
-# --- Cross-build a .deb for the Pi (arm64) via Docker, and deploy ----------
-# Mirrors the flow-grid setup. On an arm64 host the container runs natively.
-DOCKER_IMAGE := ambipi-cross-arm64
-DOCKER_PLAT  := linux/arm64
+# --- Cross-build a .deb for the Pi (armhf) via Docker, and deploy ----------
+# Mirrors the flow-grid setup. armhf runs under QEMU emulation on this host.
+DOCKER_IMAGE := ambipi-cross-armhf
+DOCKER_PLAT  := linux/arm/v7
+DEB_ARCH     := armhf
 DEB_VERSION  ?= 1.0.0
 DEPLOY_HOST  ?= pi@ataripi.local
 
@@ -82,7 +83,7 @@ deb:
 	docker build --platform $(DOCKER_PLAT) -t $(DOCKER_IMAGE) -f Dockerfile.cross .
 	docker run --rm --platform $(DOCKER_PLAT) \
 		-v "$(CURDIR)":/src:delegated -w /src \
-		-e DEB_VERSION=$(DEB_VERSION) -e DEB_ARCH=arm64 \
+		-e DEB_VERSION=$(DEB_VERSION) -e DEB_ARCH=$(DEB_ARCH) \
 		$(DOCKER_IMAGE) bash packaging/build-deb.sh
 	@ls -lh dist/*.deb
 
@@ -94,7 +95,7 @@ deploy: deb
 	@DEB=$$(ls -t dist/*.deb | head -1) && \
 		echo "--- Deploying $$DEB to $(DEPLOY_HOST) ---" && \
 		scp $(SSH_OPTS) "$$DEB" $(DEPLOY_HOST):/tmp/ambipi.deb && \
-		ssh $(SSH_OPTS) $(DEPLOY_HOST) 'sudo dpkg -i /tmp/ambipi.deb || sudo apt-get -f install -y; rm -f /tmp/ambipi.deb' && \
+		ssh $(SSH_OPTS) $(DEPLOY_HOST) 'sudo dpkg -i /tmp/ambipi.deb || sudo apt-get -f install -y; rm -f /tmp/ambipi.deb; dpkg -s ambipi >/dev/null 2>&1' && \
 		echo "--- Deployed; service restarted by postinst ---"
 
 docker-clean:

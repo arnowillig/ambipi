@@ -3,7 +3,7 @@
 # (target arch == container arch), with the repo mounted at /src.
 set -euo pipefail
 
-ARCH="${DEB_ARCH:-arm64}"
+ARCH="${DEB_ARCH:-armhf}"
 VERSION="${DEB_VERSION:-1.0.0}"
 BUILD_DIR="build-deb"
 DEB_ROOT="${BUILD_DIR}/root"
@@ -18,7 +18,9 @@ git config --global url."https://github.com/".insteadOf "git@github.com:" || tru
 git submodule update --init --recursive
 
 echo "=== [2/5] Build (native, arch=${ARCH}) ==="
-make clean || true
+# distclean (not clean) so the rpi_ws281x / pistache static libs are rebuilt
+# for THIS arch — a stale arch's archives would fail the final link.
+make distclean || true
 make -j"$(nproc)"
 
 echo "=== [3/5] Stage files ==="

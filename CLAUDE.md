@@ -11,10 +11,10 @@ the LAN (a "GameWall" of WLED shelves, a gaming table, a 32×32 display, WiZ bul
   `pistache` from git submodules, OpenCV via `pkg-config`.
   - `make run` → `sudo ./ambipi` · `make restart` → `sudo service ambipi restart` · `make log` → journalctl.
   - `make clean` / `make distclean` (also wipes submodule build dirs).
-- **Packaged build/deploy (arm64 .deb via Docker):** `make deb` cross-builds inside an
-  `arm64v8/debian:bookworm` container (`Dockerfile.cross`, native on Apple-Silicon hosts) and assembles
-  `dist/ambipi_<ver>_arm64.deb` via `packaging/build-deb.sh` (submodules fetched over HTTPS, deps via
-  `dpkg-shlibdeps`). `make deploy` scp's it to `ataripi.local` and `dpkg -i`. `make docker-clean` drops the image.
+- **Packaged build/deploy (armhf .deb via Docker):** `make deb` cross-builds inside an
+  `arm32v7/debian:bookworm` container (`Dockerfile.cross`, QEMU-emulated; ataripi is 32-bit) and assembles
+  `dist/ambipi_<ver>_armhf.deb` via `packaging/build-deb.sh` (submodules fetched over HTTPS, deps via
+  `dpkg-shlibdeps`). `make deploy` scp's it to `ataripi.local` and `dpkg -i` (verifies install). `make docker-clean` drops the image.
   - The deb installs to FHS paths and ships a systemd unit; its **`preinst` removes the old hand-installed
     infra** (`/usr/local/bin/ambipi`, `/etc/systemd/system/ambipi.service`). Maintainer scripts +
     unit live in `packaging/`.
