@@ -12,7 +12,8 @@ the LAN (a "GameWall" of WLED shelves, a gaming table, a 32×32 display, WiZ bul
   - `make run` → `sudo ./ambipi` · `make restart` → `sudo service ambipi restart` · `make log` → journalctl.
   - `make clean` / `make distclean` (also wipes submodule build dirs).
 - **Packaged build/deploy (armhf .deb via Docker):** `make deb` cross-builds inside an
-  `arm32v7/debian:bookworm` container (`Dockerfile.cross`, QEMU-emulated; ataripi is 32-bit) and assembles
+  `arm32v7/debian:bullseye` container (`Dockerfile.cross`, QEMU-emulated; **base must match the target Pi's
+  OS** — ataripi runs Raspbian 11/bullseye, so deps resolve to OpenCV 4.5 / glibc 2.31) and assembles
   `dist/ambipi_<ver>_armhf.deb` via `packaging/build-deb.sh` (submodules fetched over HTTPS, deps via
   `dpkg-shlibdeps`). `make deploy` scp's it to `ataripi.local` and `dpkg -i` (verifies install). `make docker-clean` drops the image.
   - The deb installs to FHS paths and ships a systemd unit; its **`preinst` removes the old hand-installed
