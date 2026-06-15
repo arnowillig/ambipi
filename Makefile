@@ -86,11 +86,15 @@ deb:
 		$(DOCKER_IMAGE) bash packaging/build-deb.sh
 	@ls -lh dist/*.deb
 
+# Fail fast (don't hang) if the Pi is offline/unreachable, and auto-accept a
+# new host key so a first-time connection doesn't block on a yes/no prompt.
+SSH_OPTS := -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new
+
 deploy: deb
 	@DEB=$$(ls -t dist/*.deb | head -1) && \
 		echo "--- Deploying $$DEB to $(DEPLOY_HOST) ---" && \
-		scp "$$DEB" $(DEPLOY_HOST):/tmp/ambipi.deb && \
-		ssh $(DEPLOY_HOST) 'sudo dpkg -i /tmp/ambipi.deb || sudo apt-get -f install -y; rm -f /tmp/ambipi.deb' && \
+		scp $(SSH_OPTS) "$$DEB" $(DEPLOY_HOST):/tmp/ambipi.deb && \
+		ssh $(SSH_OPTS) $(DEPLOY_HOST) 'sudo dpkg -i /tmp/ambipi.deb || sudo apt-get -f install -y; rm -f /tmp/ambipi.deb' && \
 		echo "--- Deployed; service restarted by postinst ---"
 
 docker-clean:
