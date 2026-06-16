@@ -163,6 +163,7 @@ AmbiPi::AmbiPi() : _mode(Off), _alpha(0.5), _gamma(0), _enableCropping(false)
 	_enableDisplayVideo = false;
 	_enableGamingTable = false;
 	_enableGameWallAmbilight = false;
+	_swapRB = false;
 }
 
 AmbiPi::~AmbiPi()
@@ -183,6 +184,7 @@ void AmbiPi::clearLastFrame(uint8_t r,uint8_t g,uint8_t b)
 bool AmbiPi::init(double gamma)
 {
 	loadNetworkConfig();
+	loadSettings();
 	_ws2811 = (ws2811_t *) malloc(sizeof(ws2811_t));
 	memset(_ws2811, 0, sizeof(ws2811_t));
 
@@ -1515,4 +1517,46 @@ void AmbiPi::setEnableGameWallAmbilight(bool enable)
 {
     std::lock_guard<std::recursive_mutex> lock(_mutex);
     _enableGameWallAmbilight = enable;
+}
+
+bool AmbiPi::getSwapRB() const
+{
+    std::lock_guard<std::recursive_mutex> lock(_mutex);
+    return _swapRB;
+}
+
+void AmbiPi::setSwapRB(bool swap)
+{
+    std::lock_guard<std::recursive_mutex> lock(_mutex);
+    _swapRB = swap;
+    saveSettings();
+}
+
+// --- Persistent runtime settings (UI-toggled), kept out of the config.json
+// conffile so upgrades/restarts don't clobber them. Stored under the systemd
+// WorkingDirectory /var/lib/ambipi.
+static const char* SETTINGS_PATH = "/var/lib/ambipi/settings.json";
+
+void AmbiPi::loadSettings()
+{
+    std::lock_guard<std::recursive_mutex> lock(_mutex);
+    std::ifstream ifs(SETTINGS_PATH);
+    if (!ifs) return;
+    try {
+        nlohmann::json j; ifs >> j;
+        _swapRB = j.value("swap_rb", _swapRB);
+        std::cerr << "[INFO] Loaded settings from " << SETTINGS_PATH
+                  << " (swap_rb=" << (_swapRB ? "true" : "false") << ")\n";
+    } catch (const std::exception& e) {
+        std::cerr << "[ERROR] settings.json parse error: " << e.what() << "\n";
+    }
+}
+
+void AmbiPi::saveSettings() const
+{
+    nlohmann::json j;
+    j["swap_rb"] = _swapRB;
+    std::ofstream ofs(SETTINGS_PATH);
+    if (!ofs) { std::cerr << "[ERROR] Cannot write " << SETTINGS_PATH << "\n"; return; }
+    ofs << j.dump(2) << "\n";
 }

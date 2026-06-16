@@ -33,6 +33,8 @@ const displayState = document.getElementById("displayState");
 const tableState = document.getElementById("tableState");
 const gamewallToggle = document.getElementById("gamewallToggle");
 const gamewallState = document.getElementById("gamewallState");
+const swaprbToggle = document.getElementById("swaprbToggle");
+const swaprbState = document.getElementById("swaprbState");
 
 // Apply stored or system theme preference
 let dark = (() => {
@@ -250,6 +252,19 @@ async function fetchGamewallState() {
   }
 }
 
+async function fetchSwaprbState() {
+  try {
+    const res = await fetch("/api/swaprb");
+    if (!res.ok) throw new Error("bad");
+    const raw = await res.text();
+    const on = raw.trim() === "true";
+    swaprbToggle.checked = on;
+    swaprbState.textContent = on ? "On" : "Off";
+  } catch (e) {
+    swaprbState.textContent = "Error";
+  }
+}
+
 // Toggle handlers
 displayToggle.addEventListener("change", () => {
   const target = displayToggle.checked ? "1" : "0";
@@ -275,12 +290,21 @@ gamewallToggle.addEventListener("change", () => {
       gamewallState.textContent = "Error";
     });
 });
+swaprbToggle.addEventListener("change", () => {
+  const target = swaprbToggle.checked ? "1" : "0";
+  fetch(`/api/swaprb/${target}`)
+    .then(() => fetchSwaprbState())
+    .catch(() => {
+      swaprbState.textContent = "Error";
+    });
+});
 
 // Periodically resync display/table state in case something else changed them
 setInterval(() => {
   fetchDisplayState();
   fetchTableState();
   fetchGamewallState();
+  fetchSwaprbState();
 }, 5000);
 
 // Kick off auto-refresh and initial state sync
@@ -289,3 +313,4 @@ updateImage(true);
 fetchDisplayState();
 fetchTableState();
 fetchGamewallState();
+fetchSwaprbState();

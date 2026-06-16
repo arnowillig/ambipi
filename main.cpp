@@ -141,7 +141,10 @@ int main(int argc, char *argv[])
 			break;
 		case AmbiPi::AmbiLight:
 			if (!capture) {
-				capture = new cv::VideoCapture(0);
+				// Force the V4L2 backend. OpenCV otherwise auto-selects GStreamer,
+				// which mis-decodes this "AV TO USB2.0" (EasyCap) YUYV stream and
+				// corrupts the colors (green cast / R-B mix). V4L2 decodes correctly.
+				capture = new cv::VideoCapture(0, cv::CAP_V4L2);
 #if 1
 				capture->set(cv::CAP_PROP_FRAME_WIDTH,  160);
 				capture->set(cv::CAP_PROP_FRAME_HEIGHT, 120);
@@ -169,10 +172,12 @@ int main(int argc, char *argv[])
 					capture = nullptr;
 					sleep = 100;
 				} else {
-					// This camera/backend (OpenCV GStreamer) delivers RGB, but the
-					// whole pipeline (ambilight, display, gamewall, screenshot) assumes
-					// BGR. Normalize once at the source so all consumers are correct.
-					cv::cvtColor(frame, frame, cv::COLOR_RGB2BGR);
+					// Optional manual R/B swap (web UI toggle, persisted). Off by
+					// default since the V4L2 backend already decodes correctly; a
+					// safety net if a camera/source ever delivers swapped colors.
+					if (ambiPi.getSwapRB()) {
+						cv::cvtColor(frame, frame, cv::COLOR_RGB2BGR);
+					}
 					ambiPi.setLastFrame(frame);
 					ambiPi.calculateAmbilightFromFrame(frame);
 					if (ambiPi.getEnableDisplayVideo()) {

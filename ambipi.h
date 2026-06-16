@@ -102,6 +102,8 @@ public:
 	void setEnableGameWallAmbilight(bool enable);
 	bool getEnableGamingTable() const;
 	void setEnableGamingTable(bool enableGamingTable);
+	bool getSwapRB() const;
+	void setSwapRB(bool swap);
 	void fadeColors(float pct);
 private:
 	ws2811_t* _ws2811;
@@ -120,6 +122,9 @@ private:
 	bool _enableDisplayVideo;
 	bool _enableGameWallAmbilight;
 	bool _enableGamingTable;
+	bool _swapRB;
+	void loadSettings();
+	void saveSettings() const;
 	std::vector<uint8_t> _lut;
 	
 	std::vector<uint8_t> lastFrame_;

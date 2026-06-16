@@ -42,6 +42,8 @@ public:
 	void getGamingTable(const Rest::Request &request, Http::ResponseWriter response);
 	void setGameWallAmbilight(const Rest::Request &request, Http::ResponseWriter response);
 	void getGameWallAmbilight(const Rest::Request &request, Http::ResponseWriter response);
+	void setSwapRB(const Rest::Request &request, Http::ResponseWriter response);
+	void getSwapRB(const Rest::Request &request, Http::ResponseWriter response);
 
 };
 
