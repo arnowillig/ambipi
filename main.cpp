@@ -169,6 +169,10 @@ int main(int argc, char *argv[])
 					capture = nullptr;
 					sleep = 100;
 				} else {
+					// This camera/backend (OpenCV GStreamer) delivers RGB, but the
+					// whole pipeline (ambilight, display, gamewall, screenshot) assumes
+					// BGR. Normalize once at the source so all consumers are correct.
+					cv::cvtColor(frame, frame, cv::COLOR_RGB2BGR);
 					ambiPi.setLastFrame(frame);
 					ambiPi.calculateAmbilightFromFrame(frame);
 					if (ambiPi.getEnableDisplayVideo()) {
