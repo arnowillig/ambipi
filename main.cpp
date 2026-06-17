@@ -163,7 +163,19 @@ int main(int argc, char *argv[])
 			}
 			if (!capture->grab()) {
 				sleep = 250;
-				fprintf(stderr, "No frame...\n");
+				// Rate-limit this: when the source (AppleTV) is off there is no
+				// signal and grab() fails ~4x/s, which otherwise floods the
+				// journal (it once grew to 1.7 GB). Log at most once / 10 s.
+				static time_t lastNoFrameLog = 0;
+				static int noFrameCount = 0;
+				noFrameCount++;
+				time_t nowt = time(NULL);
+				if (nowt - lastNoFrameLog >= 10) {
+					fprintf(stderr, "No frame (x%d in last %lds)...\n",
+						noFrameCount, lastNoFrameLog ? (long)(nowt - lastNoFrameLog) : 0L);
+					lastNoFrameLog = nowt;
+					noFrameCount = 0;
+				}
 			} else {
 				capture->retrieve(frame);
 				// fprintf(stderr, "Grab frame: %dx%d\n", frame.cols, frame.rows);
