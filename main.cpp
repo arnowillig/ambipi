@@ -77,6 +77,8 @@ int main(int argc, char *argv[])
 	AmbiPi::Mode lastMode = ambiPi.mode();
 
 	cv::VideoCapture* capture = nullptr;
+	time_t lastGoodFrame = 0;   // last time a frame was successfully grabbed
+	time_t lastRecovery  = 0;   // last time we attempted USB/capture recovery
 
 	time_t t = time(NULL);
 	int fps = 0;
@@ -176,6 +178,20 @@ int main(int argc, char *argv[])
 					lastNoFrameLog = nowt;
 					noFrameCount = 0;
 				}
+				// Auto-recovery: the cheap EasyCap grabber drops off USB and won't
+				// re-enumerate ("Cannot enable"). If no frame has arrived for a while,
+				// power-cycle its USB port (uhubctl, via config) and reopen the device.
+				if (lastGoodFrame == 0) lastGoodFrame = nowt;
+				if (nowt - lastGoodFrame >= 15 && nowt - lastRecovery >= 45) {
+					fprintf(stderr, "Capture dead for %lds — recovering (USB port-cycle + reopen)\n",
+						(long)(nowt - lastGoodFrame));
+					ambiPi.cycleCaptureUsbPort();   // no-op if disabled in config
+					delete capture;
+					capture = nullptr;              // forces reopen next iteration
+					lastRecovery  = nowt;
+					lastGoodFrame = nowt;           // grace period after recovery
+					sleep = 1000;                   // let USB re-enumerate before reopen
+				}
 			} else {
 				capture->retrieve(frame);
 				// fprintf(stderr, "Grab frame: %dx%d\n", frame.cols, frame.rows);
@@ -190,6 +206,7 @@ int main(int argc, char *argv[])
 					if (ambiPi.getSwapRB()) {
 						cv::cvtColor(frame, frame, cv::COLOR_RGB2BGR);
 					}
+					lastGoodFrame = time(NULL);
 					ambiPi.setLastFrame(frame);
 					ambiPi.calculateAmbilightFromFrame(frame);
 					if (ambiPi.getEnableDisplayVideo()) {

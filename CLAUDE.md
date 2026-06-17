@@ -62,9 +62,16 @@ the LAN (a "GameWall" of WLED shelves, a gaming table, a 32×32 display, WiZ bul
 Infinite loop switching on `ambiPi.mode()`:
 - **Off / White / Color** — static fills.
 - **Rainbow / Vegas / Knightrider / TestPattern / LeftSide(goal) / RightSide(goal)** — animations.
-- **AmbiLight** — grab from **USB camera** `VideoCapture(0)` at 160×120@30. Then per enabled output:
-  `calculateAmbilightFromFrame` (always), `calculateDisplayFrameFromFrame`, `calculateGameWallFrameFromFrame`
-  (kicker lights call is commented out). ~40 ms/frame.
+- **AmbiLight** — grab from a **USB capture device** `VideoCapture(0, CAP_V4L2)` at 160×120@30 (V4L2
+  backend forced — GStreamer mis-decodes the EasyCap "AV TO USB2.0" YUYV → green/R-B corruption). Then per
+  enabled output: `calculateAmbilightFromFrame` (always), `calculateDisplayFrameFromFrame`,
+  `calculateGameWallFrameFromFrame` (kicker lights call is commented out). ~40 ms/frame.
+  - **Manual R/B swap** (`getSwapRB`, `/api/swaprb`, web UI toggle, persisted to `/var/lib/ambipi/settings.json`):
+    safety net for the EasyCap, which randomly locks Cb/Cr swapped on each source (AppleTV) re-sync.
+  - **USB auto-recovery:** the EasyCap drops off USB and won't re-enumerate ("Cannot enable"). After ~15 s of
+    no frames the loop calls `cycleCaptureUsbPort()` (`uhubctl -l 1-1 -p 3 -a cycle`, configurable via
+    `usb_recovery`/`uhubctl_location`/`uhubctl_port` in `config.json`) then reopens the device. `uhubctl` is a
+    deb dependency. (Capture/source quality issues all trace to the cheap analog grabber.)
 - **AmbiLight2** — grab from **framebuffer/Dispmanx** instead of camera; does crop-border (letterbox)
   detection. Writes a debug screenshot on `SIGUSR1`.
 - Each iteration ends with `ambiPi.render()` then `usleep`.

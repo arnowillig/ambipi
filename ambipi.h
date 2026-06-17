@@ -104,6 +104,7 @@ public:
 	void setEnableGamingTable(bool enableGamingTable);
 	bool getSwapRB() const;
 	void setSwapRB(bool swap);
+	void cycleCaptureUsbPort() const;
 	void fadeColors(float pct);
 private:
 	ws2811_t* _ws2811;

@@ -52,6 +52,9 @@ if command -v dpkg-shlibdeps >/dev/null 2>&1; then
   rm -rf debian
 fi
 [ -n "${DEPS}" ] || DEPS="libc6, libstdc++6"
+# uhubctl is invoked at runtime for USB capture-device recovery (not a linked
+# lib, so shlibdeps can't see it) — add it explicitly.
+DEPS="${DEPS}, uhubctl"
 echo "Depends: ${DEPS}"
 
 cat > "${DEB_ROOT}/DEBIAN/control" <<EOF

@@ -10,5 +10,8 @@
   "wiz_port": 38899,
   "wiz_ips": ["192.168.178.80", "192.168.178.87", "192.168.178.50", "192.168.178.53"],
   "wiz_left_quarter_ip": "192.168.178.109",
-  "wiz_right_quarter_ip": "192.168.178.127"
+  "wiz_right_quarter_ip": "192.168.178.127",
+  "usb_recovery": true,
+  "uhubctl_location": "1-1",
+  "uhubctl_port": 3
 }

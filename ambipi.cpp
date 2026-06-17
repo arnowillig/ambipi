@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <unordered_map>
 #include <cstring>
+#include <cstdlib>
 
 #include "rpi_ws281x/ws2811.h"
 #include <nlohmann/json.hpp>
@@ -56,6 +57,11 @@ struct NetConfig {
                                          "192.168.178.50", "192.168.178.53" };
     std::string wizLeftQuarterIp  = "192.168.178.109";
     std::string wizRightQuarterIp = "192.168.178.127";
+    // USB capture auto-recovery: when the grabber drops off USB, power-cycle its
+    // hub port via uhubctl. Empty location or disabled => only reopen, no cycle.
+    bool        usbRecovery     = true;
+    std::string uhubctlLocation = "1-1";
+    int         uhubctlPort     = 3;
 };
 static NetConfig g_net;
 static constexpr uint8_t DDP_FLAG_VERSION1  = 0x40; // version=1 (bits 6..7)
@@ -127,6 +133,9 @@ static void loadNetworkConfig()
             g_net.wizIps = j["wiz_ips"].get<std::vector<std::string>>();
         g_net.wizLeftQuarterIp  = j.value("wiz_left_quarter_ip",  g_net.wizLeftQuarterIp);
         g_net.wizRightQuarterIp = j.value("wiz_right_quarter_ip", g_net.wizRightQuarterIp);
+        g_net.usbRecovery       = j.value("usb_recovery",        g_net.usbRecovery);
+        g_net.uhubctlLocation   = j.value("uhubctl_location",    g_net.uhubctlLocation);
+        g_net.uhubctlPort       = j.value("uhubctl_port",        g_net.uhubctlPort);
         std::cerr << "[INFO] Loaded network config from " << path << "\n";
     } catch (const std::exception& e) {
         std::cerr << "[ERROR] config.json parse error: " << e.what() << " — using defaults\n";
@@ -1530,6 +1539,20 @@ void AmbiPi::setSwapRB(bool swap)
     std::lock_guard<std::recursive_mutex> lock(_mutex);
     _swapRB = swap;
     saveSettings();
+}
+
+// Power-cycle the capture device's USB hub port via uhubctl, to recover the
+// cheap EasyCap grabber when it drops off the bus and won't re-enumerate.
+// No-op if disabled or no location configured. Runs as root (systemd unit).
+void AmbiPi::cycleCaptureUsbPort() const
+{
+    if (!g_net.usbRecovery || g_net.uhubctlLocation.empty()) return;
+    char cmd[256];
+    snprintf(cmd, sizeof(cmd), "uhubctl -l %s -p %d -a cycle >/dev/null 2>&1",
+             g_net.uhubctlLocation.c_str(), g_net.uhubctlPort);
+    std::cerr << "[INFO] USB recovery: " << cmd << "\n";
+    int rc = system(cmd);
+    if (rc != 0) std::cerr << "[WARN] uhubctl returned " << rc << " (installed? port correct?)\n";
 }
 
 // --- Persistent runtime settings (UI-toggled), kept out of the config.json
