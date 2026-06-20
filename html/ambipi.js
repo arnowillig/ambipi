@@ -35,6 +35,10 @@ const gamewallToggle = document.getElementById("gamewallToggle");
 const gamewallState = document.getElementById("gamewallState");
 const swaprbToggle = document.getElementById("swaprbToggle");
 const swaprbState = document.getElementById("swaprbState");
+const hdrToggle = document.getElementById("hdrToggle");
+const hdrState = document.getElementById("hdrState");
+const vertexInfo = document.getElementById("vertexInfo");
+const vertexConn = document.getElementById("vertexConn");
 
 // Apply stored or system theme preference
 let dark = (() => {
@@ -265,6 +269,54 @@ async function fetchSwaprbState() {
   }
 }
 
+async function fetchHdrState() {
+  try {
+    const res = await fetch("/api/hdr");
+    if (!res.ok) throw new Error("bad");
+    const raw = await res.text();
+    const on = raw.trim() === "true";
+    hdrToggle.checked = on;
+    hdrState.textContent = on ? "On" : "Off";
+  } catch (e) {
+    hdrState.textContent = "Error";
+  }
+}
+
+// --- HDFury Vertex (serial via FTDI) ---
+function escHtml(s) {
+  return String(s).replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+async function fetchVertexInfo() {
+  if (!vertexInfo) return;
+  try {
+    const res = await fetch("/api/vertex/info");
+    if (!res.ok) throw new Error("bad");
+    const j = await res.json();
+    const reachable = (j.ver && j.ver.length) || (j.input && j.input.length);
+    if (!reachable) throw new Error("empty");
+    if (vertexConn) {
+      vertexConn.textContent = "● online";
+      vertexConn.style.color = "#2faa4a";
+    }
+    const edid = j.edidmode
+      ? escHtml(j.edidmode) + (j.edidtable ? " (Tab " + escHtml(j.edidtable) + ")" : "")
+      : "—";
+    vertexInfo.innerHTML =
+      "<strong>FW:</strong> " + escHtml(j.ver || "—") + "<br>" +
+      "<strong>Input:</strong> " + escHtml(j.input || "—") + "<br>" +
+      "<strong>HDCP:</strong> " + escHtml(j.hdcp || "—") + "<br>" +
+      "<strong>EDID:</strong> " + edid + "<br>" +
+      "<strong>Autosw:</strong> " + escHtml(j.autosw || "—");
+  } catch (e) {
+    if (vertexConn) {
+      vertexConn.textContent = "● offline";
+      vertexConn.style.color = "#c9434a";
+    }
+    vertexInfo.textContent = "Nicht erreichbar (FTDI/Strom prüfen).";
+  }
+}
+
 // Toggle handlers
 displayToggle.addEventListener("change", () => {
   const target = displayToggle.checked ? "1" : "0";
@@ -298,6 +350,34 @@ swaprbToggle.addEventListener("change", () => {
       swaprbState.textContent = "Error";
     });
 });
+hdrToggle.addEventListener("change", () => {
+  const target = hdrToggle.checked ? "1" : "0";
+  fetch(`/api/hdr/${target}`)
+    .then(() => fetchHdrState())
+    .catch(() => {
+      hdrState.textContent = "Error";
+    });
+});
+
+// Vertex input buttons + hotplug + manual refresh
+document.querySelectorAll("[data-vinput]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const port = btn.getAttribute("data-vinput");
+    if (vertexInfo) vertexInfo.textContent = "Schalte auf " + port + " …";
+    fetch(`/api/vertex/set/input/${port}`)
+      .then(() => setTimeout(fetchVertexInfo, 700))
+      .catch(() => {});
+  });
+});
+const vertexHotplugBtn = document.getElementById("vertexHotplug");
+if (vertexHotplugBtn)
+  vertexHotplugBtn.addEventListener("click", () => {
+    fetch("/api/vertex/hotplug")
+      .then(() => setTimeout(fetchVertexInfo, 1200))
+      .catch(() => {});
+  });
+const vertexRefreshBtn = document.getElementById("vertexRefresh");
+if (vertexRefreshBtn) vertexRefreshBtn.addEventListener("click", fetchVertexInfo);
 
 // Periodically resync display/table state in case something else changed them
 setInterval(() => {
@@ -305,6 +385,7 @@ setInterval(() => {
   fetchTableState();
   fetchGamewallState();
   fetchSwaprbState();
+  fetchHdrState();
 }, 5000);
 
 // Kick off auto-refresh and initial state sync
@@ -314,3 +395,8 @@ fetchDisplayState();
 fetchTableState();
 fetchGamewallState();
 fetchSwaprbState();
+fetchHdrState();
+fetchVertexInfo();
+
+// Vertex status is read over serial (slower) — refresh on its own gentle interval.
+setInterval(fetchVertexInfo, 30000);

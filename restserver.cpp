@@ -19,6 +19,14 @@ RESTServer::RESTServer(AmbiPi* ambiPi) : _ambiPi(ambiPi)
 	Rest::Routes::Get(_router, "/api/swaprb/:enabled", Rest::Routes::bind(&RESTServer::setSwapRB, this));
 	Rest::Routes::Get(_router, "/api/swaprb",          Rest::Routes::bind(&RESTServer::getSwapRB, this));
 
+	Rest::Routes::Get(_router, "/api/hdr/:enabled", Rest::Routes::bind(&RESTServer::setHdrComp, this));
+	Rest::Routes::Get(_router, "/api/hdr",          Rest::Routes::bind(&RESTServer::getHdrComp, this));
+
+	Rest::Routes::Get(_router, "/api/vertex/info",            Rest::Routes::bind(&RESTServer::getVertexInfo, this));
+	Rest::Routes::Get(_router, "/api/vertex/get/:key",        Rest::Routes::bind(&RESTServer::getVertex, this));
+	Rest::Routes::Get(_router, "/api/vertex/set/:key/:value", Rest::Routes::bind(&RESTServer::setVertex, this));
+	Rest::Routes::Get(_router, "/api/vertex/hotplug",         Rest::Routes::bind(&RESTServer::hotplugVertex, this));
+
 	Rest::Routes::Get(_router, "/api/display",		Rest::Routes::bind(&RESTServer::getDisplay, this));
 	Rest::Routes::Get(_router, "/api/table",		Rest::Routes::bind(&RESTServer::getGamingTable, this));
 
@@ -344,6 +352,58 @@ void RESTServer::getSwapRB(const Rest::Request &request, Http::ResponseWriter re
 {
 	(void) request;
 	std::string resp = _ambiPi->getSwapRB() ? "true\n" : "false\n";
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, resp);
+}
+
+void RESTServer::setHdrComp(const Rest::Request &request, Http::ResponseWriter response)
+{
+	bool enabled = request.param(":enabled").as<bool>();
+	std::string resp = enabled ? "true\n" : "false\n";
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, resp);
+	_ambiPi->setHdrComp(enabled);
+}
+
+void RESTServer::getHdrComp(const Rest::Request &request, Http::ResponseWriter response)
+{
+	(void) request;
+	std::string resp = _ambiPi->getHdrComp() ? "true\n" : "false\n";
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, resp);
+}
+
+// --- HDFury Vertex serial control (FTDI on 3.5mm RS232 jack) ---------------
+
+void RESTServer::getVertexInfo(const Rest::Request &request, Http::ResponseWriter response)
+{
+	(void) request;
+	std::string resp = _vertex.infoJson();
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, resp);
+}
+
+void RESTServer::getVertex(const Rest::Request &request, Http::ResponseWriter response)
+{
+	std::string key = request.param(":key").as<std::string>();
+	std::string resp = _vertex.get(key) + "\n";
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, resp);
+}
+
+void RESTServer::setVertex(const Rest::Request &request, Http::ResponseWriter response)
+{
+	std::string key   = request.param(":key").as<std::string>();
+	std::string value = request.param(":value").as<std::string>();
+	bool ok = _vertex.set(key, value);
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, ok ? "ok\n" : "error\n");
+}
+
+void RESTServer::hotplugVertex(const Rest::Request &request, Http::ResponseWriter response)
+{
+	(void) request;
+	std::string resp = _vertex.command("hotplug") + "\n";
 	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, resp);
 }

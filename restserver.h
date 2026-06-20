@@ -7,6 +7,7 @@
 #include <pistache/endpoint.h>
 
 #include "ambipi.h"
+#include "vertex.h"
 
 using namespace std;
 using namespace Pistache;
@@ -14,6 +15,7 @@ using namespace Pistache;
 class RESTServer
 {
 	AmbiPi* _ambiPi;
+	Vertex _vertex;
 	Rest::Router _router;
 	std::string _basePath;
 public:
@@ -44,6 +46,12 @@ public:
 	void getGameWallAmbilight(const Rest::Request &request, Http::ResponseWriter response);
 	void setSwapRB(const Rest::Request &request, Http::ResponseWriter response);
 	void getSwapRB(const Rest::Request &request, Http::ResponseWriter response);
+	void setHdrComp(const Rest::Request &request, Http::ResponseWriter response);
+	void getHdrComp(const Rest::Request &request, Http::ResponseWriter response);
+	void getVertexInfo(const Rest::Request &request, Http::ResponseWriter response);
+	void getVertex(const Rest::Request &request, Http::ResponseWriter response);
+	void setVertex(const Rest::Request &request, Http::ResponseWriter response);
+	void hotplugVertex(const Rest::Request &request, Http::ResponseWriter response);
 
 };
 

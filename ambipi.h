@@ -104,6 +104,9 @@ public:
 	void setEnableGamingTable(bool enableGamingTable);
 	bool getSwapRB() const;
 	void setSwapRB(bool swap);
+	bool getHdrComp() const;
+	void setHdrComp(bool on);
+	void compensateHDR(cv::Mat& frame) const;
 	void cycleCaptureUsbPort() const;
 	void fadeColors(float pct);
 private:
@@ -124,6 +127,7 @@ private:
 	bool _enableGameWallAmbilight;
 	bool _enableGamingTable;
 	bool _swapRB;
+	bool _hdrComp;
 	void loadSettings();
 	void saveSettings() const;
 	std::vector<uint8_t> _lut;

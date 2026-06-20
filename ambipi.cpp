@@ -173,6 +173,7 @@ AmbiPi::AmbiPi() : _mode(Off), _alpha(0.5), _gamma(0), _enableCropping(false)
 	_enableGamingTable = false;
 	_enableGameWallAmbilight = false;
 	_swapRB = false;
+	_hdrComp = false;
 }
 
 AmbiPi::~AmbiPi()
@@ -1541,6 +1542,65 @@ void AmbiPi::setSwapRB(bool swap)
     saveSettings();
 }
 
+bool AmbiPi::getHdrComp() const
+{
+    std::lock_guard<std::recursive_mutex> lock(_mutex);
+    return _hdrComp;
+}
+
+void AmbiPi::setHdrComp(bool on)
+{
+    std::lock_guard<std::recursive_mutex> lock(_mutex);
+    _hdrComp = on;
+    saveSettings();
+}
+
+// Tone-map an HDR (BT.2020 PQ / ST.2084) frame back to a vivid SDR look, for the
+// ambilight only. The HDFury Vertex passes HDR through unchanged, so the grabber
+// sees PQ-encoded BT.2020 — which, read as gamma/SDR, looks dark and desaturated.
+// We undo PQ (ST.2084 EOTF), normalize to an SDR reference white, re-encode with a
+// ~2.2 gamma (per-channel LUT), then boost saturation to recover the BT.2020->709
+// gamut dullness. Toggle only for HDR sources (applying it to real SDR content
+// would over-brighten it). Beamer keeps full HDR via the Vertex's other output.
+void AmbiPi::compensateHDR(cv::Mat& frame) const
+{
+    if (frame.empty() || frame.type() != CV_8UC3) return;
+
+    // PQ(ST.2084) EOTF -> normalize to SDR white -> 2.2 gamma OETF, as a 1x256 LUT.
+    static cv::Mat pqLut;
+    if (pqLut.empty()) {
+        pqLut.create(1, 256, CV_8U);
+        uint8_t* p = pqLut.ptr<uint8_t>();
+        const double m1 = 0.1593017578125;      // 2610/16384
+        const double m2 = 78.84375;             // 2523/4096*128
+        const double c1 = 0.8359375;            // 3424/4096
+        const double c2 = 18.8515625;           // 2413/4096*32
+        const double c3 = 18.6875;              // 2392/4096*32
+        const double targetWhiteNits = 200.0;   // HDR diffuse white -> SDR 1.0
+        for (int i = 0; i < 256; ++i) {
+            double Ep   = i / 255.0;
+            double epm2 = pow(Ep, 1.0 / m2);
+            double num  = std::max(epm2 - c1, 0.0);
+            double den  = c2 - c3 * epm2;
+            double L    = pow(num / den, 1.0 / m1);          // [0,1] of 10000 nits
+            double y    = std::min(1.0, (L * 10000.0) / targetWhiteNits);
+            double out  = pow(y, 1.0 / 2.2);
+            int v = (int) lround(out * 255.0);
+            p[i] = (uint8_t)(v < 0 ? 0 : (v > 255 ? 255 : v));
+        }
+    }
+    cv::LUT(frame, pqLut, frame);
+
+    // Saturation boost (HSV) to recover the dull BT.2020-as-709 colors.
+    cv::Mat hsv;
+    cv::cvtColor(frame, hsv, cv::COLOR_BGR2HSV);
+    std::vector<cv::Mat> ch;
+    cv::split(hsv, ch);
+    ch[1].convertTo(ch[1], CV_8U, 1.4, 0.0);    // S *= 1.4 (saturating)
+    cv::merge(ch, hsv);
+    cv::cvtColor(hsv, frame, cv::COLOR_HSV2BGR);
+}
+
 // Power-cycle the capture device's USB hub port via uhubctl, to recover the
 // cheap EasyCap grabber when it drops off the bus and won't re-enumerate.
 // No-op if disabled or no location configured. Runs as root (systemd unit).
@@ -1568,8 +1628,10 @@ void AmbiPi::loadSettings()
     try {
         nlohmann::json j; ifs >> j;
         _swapRB = j.value("swap_rb", _swapRB);
+        _hdrComp = j.value("hdr_comp", _hdrComp);
         std::cerr << "[INFO] Loaded settings from " << SETTINGS_PATH
-                  << " (swap_rb=" << (_swapRB ? "true" : "false") << ")\n";
+                  << " (swap_rb=" << (_swapRB ? "true" : "false")
+                  << ", hdr_comp=" << (_hdrComp ? "true" : "false") << ")\n";
     } catch (const std::exception& e) {
         std::cerr << "[ERROR] settings.json parse error: " << e.what() << "\n";
     }
@@ -1579,6 +1641,7 @@ void AmbiPi::saveSettings() const
 {
     nlohmann::json j;
     j["swap_rb"] = _swapRB;
+    j["hdr_comp"] = _hdrComp;
     std::ofstream ofs(SETTINGS_PATH);
     if (!ofs) { std::cerr << "[ERROR] Cannot write " << SETTINGS_PATH << "\n"; return; }
     ofs << j.dump(2) << "\n";

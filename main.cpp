@@ -206,6 +206,12 @@ int main(int argc, char *argv[])
 					if (ambiPi.getSwapRB()) {
 						cv::cvtColor(frame, frame, cv::COLOR_RGB2BGR);
 					}
+					// HDR (BT2020 PQ) source captured as SDR looks dark/dull.
+					// Optional toggle: tone-map PQ->SDR + saturation boost so the
+					// ambilight stays vivid. Beamer keeps full HDR (other Vertex out).
+					if (ambiPi.getHdrComp()) {
+						ambiPi.compensateHDR(frame);
+					}
 					lastGoodFrame = time(NULL);
 					ambiPi.setLastFrame(frame);
 					ambiPi.calculateAmbilightFromFrame(frame);

@@ -139,9 +139,39 @@
               <div class="small-text" id="swaprbState">Loading…</div>
             </div>
           </div>
+          <div class="toggle-item">
+            <label class="switch">
+              <input type="checkbox" id="hdrToggle" aria-label="HDR to SDR compensation on/off" />
+              <span class="slider-switch"></span>
+            </label>
+            <div style="margin-left:8px;">
+              <div><strong>HDR→SDR</strong></div>
+              <div class="small-text" id="hdrState">Loading…</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
+
+    <!-- HDFury Vertex card -->
+    <div class="card" aria-label="HDFury Vertex">
+      <div class="inline-label">
+        <div style="flex:1;">
+          <strong>HDFury Vertex</strong>
+          <div class="small-text">Serial via FTDI (19200). <span id="vertexConn">…</span></div>
+        </div>
+        <button class="btn secondary" id="vertexRefresh" aria-label="Refresh Vertex info">⟳</button>
+      </div>
+      <div class="small-text" id="vertexInfo" style="margin-top:6px; line-height:1.7;">Loading…</div>
+      <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
+        <button class="btn" data-vinput="top">Input&nbsp;Top</button>
+        <button class="btn" data-vinput="bot">Input&nbsp;Bot</button>
+        <button class="btn secondary" data-vinput="thru">Thru</button>
+        <button class="btn secondary" data-vinput="swap">Swap</button>
+        <button class="btn secondary" id="vertexHotplug">Hotplug</button>
+      </div>
+    </div>
+
     <!-- External links -->
     <div class="card">
       <div>
