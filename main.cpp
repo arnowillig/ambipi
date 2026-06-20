@@ -148,8 +148,8 @@ int main(int argc, char *argv[])
 				// corrupts the colors (green cast / R-B mix). V4L2 decodes correctly.
 				capture = new cv::VideoCapture(0, cv::CAP_V4L2);
 #if 1
-				capture->set(cv::CAP_PROP_FRAME_WIDTH,  160);
-				capture->set(cv::CAP_PROP_FRAME_HEIGHT, 120);
+				capture->set(cv::CAP_PROP_FRAME_WIDTH,  1280);
+				capture->set(cv::CAP_PROP_FRAME_HEIGHT, 720);
 #else
 				capture->set(cv::CAP_PROP_FRAME_WIDTH,  720);
 				capture->set(cv::CAP_PROP_FRAME_HEIGHT, 480);
