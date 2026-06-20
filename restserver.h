@@ -8,6 +8,8 @@
 
 #include "ambipi.h"
 #include "vertex.h"
+#include "atvremote.h"
+#include "centronic.h"
 
 using namespace std;
 using namespace Pistache;
@@ -16,6 +18,8 @@ class RESTServer
 {
 	AmbiPi* _ambiPi;
 	Vertex _vertex;
+	AtvRemote _atv;
+	Centronic _shutter;
 	Rest::Router _router;
 	std::string _basePath;
 public:
@@ -52,6 +56,14 @@ public:
 	void getVertex(const Rest::Request &request, Http::ResponseWriter response);
 	void setVertex(const Rest::Request &request, Http::ResponseWriter response);
 	void hotplugVertex(const Rest::Request &request, Http::ResponseWriter response);
+	void getCaptureRes(const Rest::Request &request, Http::ResponseWriter response);
+	void setCaptureRes(const Rest::Request &request, Http::ResponseWriter response);
+	void beamerOff(const Rest::Request &request, Http::ResponseWriter response);
+	void beamerOn(const Rest::Request &request, Http::ResponseWriter response);
+	void getShutterStatus(const Rest::Request &request, Http::ResponseWriter response);
+	void shutterOpen(const Rest::Request &request, Http::ResponseWriter response);
+	void shutterClose(const Rest::Request &request, Http::ResponseWriter response);
+	void shutterHalt(const Rest::Request &request, Http::ResponseWriter response);
 
 };
 

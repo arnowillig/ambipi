@@ -27,9 +27,23 @@
 <!--
          <div class="status" id="updateStatus">Updating...</div>
 -->
+          <label class="switch" style="margin-left:8px;" title="Web-Preview an/aus">
+            <input type="checkbox" id="previewToggle" aria-label="Web preview on/off" checked />
+            <span class="slider-switch"></span>
+          </label>
         </div>
         <div class="image-wrapper" style="margin-top:4px;">
           <img id="img" src="/api/screenshot.jpg" alt="Screenshot" class="responsive" />
+        </div>
+        <div class="inline-label" style="margin-top:8px;">
+          <label for="capresSelect"><strong>Capture-Auflösung</strong></label>
+          <select id="capresSelect" aria-label="Capture resolution" style="margin-left:auto; padding:4px 6px;">
+            <option value="1920x1080">1920×1080</option>
+            <option value="1280x720">1280×720</option>
+            <option value="1024x768">1024×768</option>
+            <option value="800x600">800×600</option>
+            <option value="640x480">640×480</option>
+          </select>
         </div>
 <!--
         <div style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap;">
@@ -169,6 +183,31 @@
         <button class="btn secondary" data-vinput="thru">Thru</button>
         <button class="btn secondary" data-vinput="swap">Swap</button>
         <button class="btn secondary" id="vertexHotplug">Hotplug</button>
+      </div>
+    </div>
+
+    <!-- Beamer (JMGO) card -->
+    <div class="card" aria-label="Beamer JMGO">
+      <div>
+        <strong>Beamer (JMGO)</strong>
+        <div class="small-text">Ein/Aus per ADB (Netzwerk-Standby).</div>
+      </div>
+      <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
+        <button class="btn" id="beamerOn">Beamer Ein</button>
+        <button class="btn secondary" id="beamerOff">Beamer Aus</button>
+      </div>
+    </div>
+
+    <!-- Garagenrollo / Shutter (Becker Centronic) card -->
+    <div class="card" aria-label="Garagenrollo">
+      <div>
+        <strong>Garagenrollo</strong>
+        <div class="small-text">Becker Centronic Rollo. <span id="shutterInfo">…</span></div>
+      </div>
+      <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
+        <button class="btn" id="shutterOpen">Auf</button>
+        <button class="btn secondary" id="shutterHalt">Stopp</button>
+        <button class="btn" id="shutterClose">Zu</button>
       </div>
     </div>
 

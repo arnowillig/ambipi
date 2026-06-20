@@ -107,6 +107,10 @@ public:
 	bool getHdrComp() const;
 	void setHdrComp(bool on);
 	void compensateHDR(cv::Mat& frame) const;
+	int  getCaptureWidth() const;
+	int  getCaptureHeight() const;
+	void setCaptureRes(int w, int h);
+	bool takeCaptureResDirty();
 	void cycleCaptureUsbPort() const;
 	void fadeColors(float pct);
 private:
@@ -128,6 +132,9 @@ private:
 	bool _enableGamingTable;
 	bool _swapRB;
 	bool _hdrComp;
+	int  _capWidth;
+	int  _capHeight;
+	bool _capResDirty;
 	void loadSettings();
 	void saveSettings() const;
 	std::vector<uint8_t> _lut;

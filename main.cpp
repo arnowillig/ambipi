@@ -10,6 +10,8 @@
 #include "ambipi.h"
 #include "restserver.h"
 #include "framebuffer.h"
+#include "atvremote.h"
+#include <cstring>
 
 #ifdef _GUI_
 #define TEST_VIDEO "/home/akw/Downloads/big_buck_bunny_1080p_surround.avi"
@@ -47,6 +49,13 @@ static void restServer(RESTServer* restServer)
 
 int main(int argc, char *argv[])
 {
+	// One-time Android TV Remote pairing for the JMGO beamer:
+	//   sudo ambipi --pair-beamer   (enter the code shown on the projector)
+	if (argc > 1 && strcmp(argv[1], "--pair-beamer") == 0) {
+		AtvRemote atv;
+		return atv.pair() ? 0 : 1;
+	}
+
 	const char* testVideo;
 	
 	if (argc>1) {
@@ -142,14 +151,19 @@ int main(int argc, char *argv[])
 			}
 			break;
 		case AmbiPi::AmbiLight:
+			// Capture resolution changed via the web UI -> reopen with the new mode.
+			if (capture && ambiPi.takeCaptureResDirty()) {
+				delete capture;
+				capture = nullptr;
+			}
 			if (!capture) {
 				// Force the V4L2 backend. OpenCV otherwise auto-selects GStreamer,
 				// which mis-decodes this "AV TO USB2.0" (EasyCap) YUYV stream and
 				// corrupts the colors (green cast / R-B mix). V4L2 decodes correctly.
 				capture = new cv::VideoCapture(0, cv::CAP_V4L2);
 #if 1
-				capture->set(cv::CAP_PROP_FRAME_WIDTH,  1280);
-				capture->set(cv::CAP_PROP_FRAME_HEIGHT, 720);
+				capture->set(cv::CAP_PROP_FRAME_WIDTH,  ambiPi.getCaptureWidth());
+				capture->set(cv::CAP_PROP_FRAME_HEIGHT, ambiPi.getCaptureHeight());
 #else
 				capture->set(cv::CAP_PROP_FRAME_WIDTH,  720);
 				capture->set(cv::CAP_PROP_FRAME_HEIGHT, 480);
@@ -206,12 +220,8 @@ int main(int argc, char *argv[])
 					if (ambiPi.getSwapRB()) {
 						cv::cvtColor(frame, frame, cv::COLOR_RGB2BGR);
 					}
-					// HDR (BT2020 PQ) source captured as SDR looks dark/dull.
-					// Optional toggle: tone-map PQ->SDR + saturation boost so the
-					// ambilight stays vivid. Beamer keeps full HDR (other Vertex out).
-					if (ambiPi.getHdrComp()) {
-						ambiPi.compensateHDR(frame);
-					}
+					// HDR->SDR compensation now happens inside calculateAmbilightFromFrame,
+					// on the small downsampled edge strips (cheap) — not on the full frame.
 					lastGoodFrame = time(NULL);
 					ambiPi.setLastFrame(frame);
 					ambiPi.calculateAmbilightFromFrame(frame);

@@ -52,9 +52,9 @@ if command -v dpkg-shlibdeps >/dev/null 2>&1; then
   rm -rf debian
 fi
 [ -n "${DEPS}" ] || DEPS="libc6, libstdc++6"
-# uhubctl is invoked at runtime for USB capture-device recovery (not a linked
-# lib, so shlibdeps can't see it) — add it explicitly.
-DEPS="${DEPS}, uhubctl"
+# uhubctl (USB capture recovery) and adb (JMGO beamer power-off via /api/beamer/off)
+# are invoked at runtime, not linked libs, so shlibdeps can't see them — add explicitly.
+DEPS="${DEPS}, uhubctl, adb"
 echo "Depends: ${DEPS}"
 
 cat > "${DEB_ROOT}/DEBIAN/control" <<EOF

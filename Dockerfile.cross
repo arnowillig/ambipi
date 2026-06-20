@@ -6,7 +6,7 @@ FROM arm32v7/debian:bullseye-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       g++ make cmake pkg-config git ca-certificates \
-      libopencv-dev libssl-dev rapidjson-dev nlohmann-json3-dev \
+      libopencv-dev libssl-dev rapidjson-dev nlohmann-json3-dev libsqlite3-dev \
       dpkg-dev binutils file \
     && rm -rf /var/lib/apt/lists/*
 

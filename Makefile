@@ -16,6 +16,8 @@ CXXFLAGS += -pthread
 LIBS += rpi_ws281x/build/libws2811.a
 LIBS += pistache/build/src/libpistache.a
 LIBS += $(OPENCV_LIBS) -lpthread
+LIBS += -lssl -lcrypto
+LIBS += -lsqlite3   # Becker Centronic shutter counter DB (centronic.cpp)
 
 TARGET = ambipi
 
@@ -74,7 +76,7 @@ log: $(TARGET)
 DOCKER_IMAGE := ambipi-cross-armhf
 DOCKER_PLAT  := linux/arm/v7
 DEB_ARCH     := armhf
-DEB_VERSION  ?= 1.0.8
+DEB_VERSION  ?= 1.0.18
 DEPLOY_HOST  ?= pi@ataripi.local
 
 .PHONY: deb deploy docker-clean

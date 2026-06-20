@@ -2,6 +2,7 @@
 #include "framebuffer.h"
 #include "json.hpp"
 #include <algorithm>
+#include <cstdlib>
 // #include <nlohmann/json.hpp>
 
 
@@ -26,6 +27,20 @@ RESTServer::RESTServer(AmbiPi* ambiPi) : _ambiPi(ambiPi)
 	Rest::Routes::Get(_router, "/api/vertex/get/:key",        Rest::Routes::bind(&RESTServer::getVertex, this));
 	Rest::Routes::Get(_router, "/api/vertex/set/:key/:value", Rest::Routes::bind(&RESTServer::setVertex, this));
 	Rest::Routes::Get(_router, "/api/vertex/hotplug",         Rest::Routes::bind(&RESTServer::hotplugVertex, this));
+
+	Rest::Routes::Get(_router, "/api/capres",       Rest::Routes::bind(&RESTServer::getCaptureRes, this));
+	Rest::Routes::Get(_router, "/api/capres/:w/:h", Rest::Routes::bind(&RESTServer::setCaptureRes, this));
+
+	Rest::Routes::Get(_router, "/api/beamer/off", Rest::Routes::bind(&RESTServer::beamerOff, this));
+	Rest::Routes::Get(_router, "/api/beamer/on",  Rest::Routes::bind(&RESTServer::beamerOn, this));
+
+	Rest::Routes::Get(_router, "/api/shutter",                Rest::Routes::bind(&RESTServer::getShutterStatus, this));
+	Rest::Routes::Get(_router, "/api/shutter/open",           Rest::Routes::bind(&RESTServer::shutterOpen,  this));
+	Rest::Routes::Get(_router, "/api/shutter/open/:channel",  Rest::Routes::bind(&RESTServer::shutterOpen,  this));
+	Rest::Routes::Get(_router, "/api/shutter/close",          Rest::Routes::bind(&RESTServer::shutterClose, this));
+	Rest::Routes::Get(_router, "/api/shutter/close/:channel", Rest::Routes::bind(&RESTServer::shutterClose, this));
+	Rest::Routes::Get(_router, "/api/shutter/halt",           Rest::Routes::bind(&RESTServer::shutterHalt,  this));
+	Rest::Routes::Get(_router, "/api/shutter/halt/:channel",  Rest::Routes::bind(&RESTServer::shutterHalt,  this));
 
 	Rest::Routes::Get(_router, "/api/display",		Rest::Routes::bind(&RESTServer::getDisplay, this));
 	Rest::Routes::Get(_router, "/api/table",		Rest::Routes::bind(&RESTServer::getGamingTable, this));
@@ -406,6 +421,81 @@ void RESTServer::hotplugVertex(const Rest::Request &request, Http::ResponseWrite
 	std::string resp = _vertex.command("hotplug") + "\n";
 	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, resp);
+}
+
+// --- Becker Centronic roller-shutter / projection-screen control -----------
+// Native port of /usr/local/bin/{shutter_open,shutter_close,shutter_halt}.sh.
+// open == DOWN (screen rolls down), close == UP, halt == stop. Optional
+// :channel ("[unit:]channel") defaults to "1" (unit 1737b, channel 1).
+
+void RESTServer::getShutterStatus(const Rest::Request &request, Http::ResponseWriter response)
+{
+	(void) request;
+	std::string resp = _shutter.statusJson() + "\n";
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, resp);
+}
+
+void RESTServer::shutterOpen(const Rest::Request &request, Http::ResponseWriter response)
+{
+	std::string ch = request.hasParam(":channel") ? request.param(":channel").as<std::string>() : "1";
+	bool ok = _shutter.open(ch);
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, ok ? "ok\n" : "error\n");
+}
+
+void RESTServer::shutterClose(const Rest::Request &request, Http::ResponseWriter response)
+{
+	std::string ch = request.hasParam(":channel") ? request.param(":channel").as<std::string>() : "1";
+	bool ok = _shutter.close(ch);
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, ok ? "ok\n" : "error\n");
+}
+
+void RESTServer::shutterHalt(const Rest::Request &request, Http::ResponseWriter response)
+{
+	std::string ch = request.hasParam(":channel") ? request.param(":channel").as<std::string>() : "1";
+	bool ok = _shutter.halt(ch);
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, ok ? "ok\n" : "error\n");
+}
+
+void RESTServer::getCaptureRes(const Rest::Request &request, Http::ResponseWriter response)
+{
+	(void) request;
+	std::string resp = std::to_string(_ambiPi->getCaptureWidth()) + "x"
+	                 + std::to_string(_ambiPi->getCaptureHeight()) + "\n";
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, resp);
+}
+
+void RESTServer::setCaptureRes(const Rest::Request &request, Http::ResponseWriter response)
+{
+	int w = request.param(":w").as<int>();
+	int h = request.param(":h").as<int>();
+	_ambiPi->setCaptureRes(w, h);
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, "ok\n");
+}
+
+// JMGO power via the Android TV Remote v2 protocol (atvremote.cpp). Needs a
+// one-time pairing: run `sudo ambipi --pair-beamer` on the Pi and enter the code
+// shown on the projector. WAKEUP=on, SLEEP=off — works from standby (the remote
+// service stays reachable, unlike the flaky ADB-over-network).
+void RESTServer::beamerOff(const Rest::Request &request, Http::ResponseWriter response)
+{
+	(void) request;
+	bool ok = _atv.powerOff();
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, ok ? "ok\n" : "error\n");
+}
+
+void RESTServer::beamerOn(const Rest::Request &request, Http::ResponseWriter response)
+{
+	(void) request;
+	bool ok = _atv.powerOn();
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, ok ? "ok\n" : "error\n");
 }
 
 void RESTServer::setDisplay(const Rest::Request &request, Http::ResponseWriter response)

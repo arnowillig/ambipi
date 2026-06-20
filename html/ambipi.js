@@ -39,6 +39,9 @@ const hdrToggle = document.getElementById("hdrToggle");
 const hdrState = document.getElementById("hdrState");
 const vertexInfo = document.getElementById("vertexInfo");
 const vertexConn = document.getElementById("vertexConn");
+const previewToggle = document.getElementById("previewToggle");
+const capresSelect = document.getElementById("capresSelect");
+let previewOn = localStorage.getItem("ambi_preview") !== "off";
 
 // Apply stored or system theme preference
 let dark = (() => {
@@ -101,10 +104,11 @@ function updateImage(force = false) {
 // Start periodic refresh (honoring visibility)
 function startAutoRefresh() {
   if (intervalHandle) clearInterval(intervalHandle);
+  if (!previewOn) return;
   intervalHandle = setInterval(() => updateImage(), 1000);
 }
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) updateImage(true);
+  if (!document.hidden && previewOn) updateImage(true);
 });
 imgEl.addEventListener("click", () => updateImage(true));
 
@@ -389,14 +393,78 @@ setInterval(() => {
 }, 5000);
 
 // Kick off auto-refresh and initial state sync
-startAutoRefresh();
-updateImage(true);
+// Web preview on/off (frontend-only: hides the image + stops refreshing,
+// which also stops the screenshot requests / server-side work).
+function applyPreviewState() {
+  if (previewToggle) previewToggle.checked = previewOn;
+  if (imgEl) imgEl.style.display = previewOn ? "" : "none";
+  if (previewOn) {
+    startAutoRefresh();
+    updateImage(true);
+  } else if (intervalHandle) {
+    clearInterval(intervalHandle);
+    intervalHandle = null;
+  }
+}
+if (previewToggle) {
+  previewToggle.addEventListener("change", () => {
+    previewOn = previewToggle.checked;
+    localStorage.setItem("ambi_preview", previewOn ? "on" : "off");
+    applyPreviewState();
+  });
+}
+
+// Capture resolution dropdown -> /api/capres/:w/:h (reopens the V4L2 device).
+async function fetchCapRes() {
+  if (!capresSelect) return;
+  try {
+    const res = await fetch("/api/capres");
+    const v = (await res.text()).trim();   // e.g. "1280x720"
+    if (v) capresSelect.value = v;
+  } catch (e) {}
+}
+if (capresSelect) {
+  capresSelect.addEventListener("change", () => {
+    const p = capresSelect.value.split("x");
+    fetch(`/api/capres/${p[0]}/${p[1]}`).catch(() => {});
+  });
+}
+
+// Beamer (JMGO) power via ADB
+const beamerOnBtn = document.getElementById("beamerOn");
+const beamerOffBtn = document.getElementById("beamerOff");
+if (beamerOnBtn) beamerOnBtn.addEventListener("click", () => fetch("/api/beamer/on").catch(() => {}));
+if (beamerOffBtn) beamerOffBtn.addEventListener("click", () => fetch("/api/beamer/off").catch(() => {}));
+
+// Garagenrollo / Shutter (Becker Centronic): open == DOWN, close == UP, halt == stop
+async function fetchShutterState() {
+  const el = document.getElementById("shutterInfo");
+  if (!el) return;
+  try {
+    const res = await fetch("/api/shutter");
+    const j = await res.json();
+    const u = (j.units || []).find((x) => x.index === 1) || (j.units || [])[0];
+    el.textContent = u ? `Einheit ${u.code} · #${u.increment}${u.configured ? "" : " (nicht gekoppelt!)"}` : "";
+  } catch {
+    el.textContent = "";
+  }
+}
+const shutterOpenBtn = document.getElementById("shutterOpen");
+const shutterCloseBtn = document.getElementById("shutterClose");
+const shutterHaltBtn = document.getElementById("shutterHalt");
+if (shutterOpenBtn) shutterOpenBtn.addEventListener("click", () => fetch("/api/shutter/open").then(() => setTimeout(fetchShutterState, 400)).catch(() => {}));
+if (shutterCloseBtn) shutterCloseBtn.addEventListener("click", () => fetch("/api/shutter/close").then(() => setTimeout(fetchShutterState, 400)).catch(() => {}));
+if (shutterHaltBtn) shutterHaltBtn.addEventListener("click", () => fetch("/api/shutter/halt").then(() => setTimeout(fetchShutterState, 400)).catch(() => {}));
+
+applyPreviewState();
+fetchCapRes();
 fetchDisplayState();
 fetchTableState();
 fetchGamewallState();
 fetchSwaprbState();
 fetchHdrState();
 fetchVertexInfo();
+fetchShutterState();
 
 // Vertex status is read over serial (slower) — refresh on its own gentle interval.
 setInterval(fetchVertexInfo, 30000);
