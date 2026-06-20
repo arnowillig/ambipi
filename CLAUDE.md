@@ -40,7 +40,9 @@ the LAN (a "GameWall" of WLED shelves, a gaming table, a 32×32 display, WiZ bul
 |------|------|
 | `main.cpp` | Entry point + main render loop (mode state machine, frame capture, FPS pacing, signals). |
 | `ambipi.h` / `ambipi.cpp` | Core `AmbiPi` class: LED buffers, modes, ambilight calc, all network outputs. **Biggest file (~1500 lines).** |
-| `restserver.h` / `restserver.cpp` | `RESTServer` (Pistache) on **port 80**: HTTP control API + serves the web UI. |
+| `restserver.h` / `restserver.cpp` | `RESTServer` (Pistache) on **port 80**: HTTP control API + serves the web UI. Owns a `Vertex` + an `AtvRemote`. |
+| `vertex.h` / `vertex.cpp` | `Vertex`: HDFury 4K Vertex serial control over `/dev/ttyUSB0` (FTDI, 19200 8N1, `#<cmd>\r`). |
+| `atvremote.h` / `atvremote.cpp` | `AtvRemote`: Android TV Remote v2 client for the JMGO beamer (TLS + hand-rolled protobuf). See **Beamer power control** below. |
 | `framebuffer.h` / `framebuffer.cpp` | `FrameBuffer`: read/write `/dev/fb0`; grab screen via Dispmanx (`HAVE_DISPMANX`). |
 | `html/` | Web UI: `index.html`, `ambipi.js` (vanilla JS), `ambipi.css`. |
 | `gamewall/` | **Separate standalone executable** (CMake) — a WLED proxy REST server. See below. |
@@ -117,10 +119,39 @@ Mostly `GET` "set" endpoints (path params), plain-text responses, CORS `*`:
 - `/api/mode/:mode` (off|ambilight|white|color|rainbow|vegas|knightrider|testpattern|leftside|rightside), `/api/mode`
 - `/api/col/:r/:g/:b`, `/api/bri[/:bri]`, `/api/gamma[/:gamma]`, `/api/alpha[/:alpha]`, `/api/crop[/:crop]`
 - `/api/display/:enabled`, `/api/table/:enabled`, `/api/gamewall[/:enabled]`
+- `/api/swaprb[/:enabled]`, `/api/hdr[/:enabled]` (HDR→SDR compensation), `/api/capres[/:w/:h]` (capture resolution)
+- `/api/vertex/{info,get/:key,set/:key/:value,hotplug}` — HDFury Vertex serial control (`Vertex`)
+- `/api/beamer/on`, `/api/beamer/off` — JMGO projector power (`AtvRemote`, idempotent — see below)
 - `/api/screenshot.jpg` — JPEG of the debug frame (annotated LED layout)
 - `/`, `/index.html`, `/static/*` — serves `html/`
 - `POST /api` — Alexa-style smart-home directives: `TurnOn/TurnOff/SetBrightness/SetColor/SetColorTemperature`.
   Note quirk: `SetColor` with pure blue (0,0,255) switches into **AmbiLight** mode.
+
+### Beamer power control — Android TV Remote v2 (`atvremote.cpp`)
+
+`/api/beamer/{on,off}` drive the **JMGO S91A projector (`192.168.178.118`)** over the **Android TV
+Remote v2** protocol — pure C++ over OpenSSL TLS with hand-rolled protobuf (no Python, no protobuf lib
+at runtime). CEC through the Vertex doesn't bridge input↔output, ADB-over-network isn't persistent, and
+the phone app is BT-only — this network remote is the working path. Hard-won details (all were dead ends
+until fixed):
+
+- **Ports are the opposite of intuition:** **6467 = pairing**, **6466 = remote/commands**. Pairing the
+  remote port (6466) returns TLS `certificate_unknown` (alert 46) — that was the original red herring.
+- **Pairing is one-time and interactive:** `sudo ambipi --pair-beamer` (CLI mode handled at the top of
+  `main()`) generates a self-signed RSA client cert (CA:TRUE basicConstraints + SAN, like the reference
+  `androidtvremote2`), runs the Polo handshake on **6467**, and you type the 6-hex code shown on the TV.
+  The authorized cert is stored at **`/var/lib/ambipi/atv_client.pem`** (persists across deploys; lives in
+  `/var/lib`, not shipped by the deb). Re-running `--pair-beamer` deletes + regenerates it.
+- **Power = `KEYCODE_POWER` (26), a toggle.** `SLEEP`/`WAKEUP` (223/224) do **nothing** on this device.
+  `powerOn`/`powerOff` are **idempotent**: `runRemote()` reads the live power state from the
+  **`remote_start`** message (field 40, `started`) and only injects POWER when the state differs from the
+  target.
+- **Handshake (`runRemote`, port 6466):** answer `remote_configure`(1)/`remote_set_active`(2)/
+  `remote_ping_request`(8→9) advertising feature flags **615** (`PING|KEY|POWER|VOLUME|IME|APP_LINK`), then
+  wait for `remote_start`(40). **Timing matters:** a key injected immediately after `remote_start` is
+  dropped — `runRemote` waits ~1.5 s before sending `remote_key_inject`(10){key_code, direction=SHORT}.
+- A `key.py` reference harness (Python `androidtvremote2`) was used only to reverse-engineer the protocol;
+  it is not part of the runtime. `make` links `-lssl -lcrypto`.
 
 ## `gamewall/` — standalone WLED proxy (separate program)
 
@@ -143,8 +174,11 @@ Mostly `GET` "set" endpoints (path params), plain-text responses, CORS `*`:
 | Gaming table WLED | `192.168.178.150:21324` | WLED DNRGB |
 | 32×32 Display | `192.168.178.46:14000` | custom KDP |
 | WiZ bulbs | `192.168.178.{80,87,50,53,109,127}:38899` | WiZ JSON UDP |
+| JMGO S91A beamer | `192.168.178.118:6467` (pair) / `:6466` (cmd) | Android TV Remote v2 (TLS) |
+| HDFury Vertex | `/dev/ttyUSB0` (FTDI serial) | `#<cmd>\r` @ 19200 8N1 |
 
-All addresses above are defaults in `NetConfig` and overridable via `config.json`.
+The WLED/table/display/WiZ addresses are defaults in `NetConfig` and overridable via `config.json`.
+The beamer host is hardcoded in `AtvRemote` (default ctor arg) and the Vertex is a local serial device.
 
 ## Gotchas
 
