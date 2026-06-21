@@ -35,6 +35,8 @@ const gamewallToggle = document.getElementById("gamewallToggle");
 const gamewallState = document.getElementById("gamewallState");
 const hdrToggle = document.getElementById("hdrToggle");
 const hdrState = document.getElementById("hdrState");
+const cropToggle = document.getElementById("cropToggle");
+const cropState = document.getElementById("cropState");
 const vertexInfo = document.getElementById("vertexInfo");
 const vertexConn = document.getElementById("vertexConn");
 const previewToggle = document.getElementById("previewToggle");
@@ -329,6 +331,18 @@ async function fetchHdrState() {
   }
 }
 
+async function fetchCropState() {
+  try {
+    const res = await fetch("/api/crop");
+    if (!res.ok) throw new Error("bad");
+    const on = (await res.text()).trim() === "1";   // /api/crop returns 1/0
+    cropToggle.checked = on;
+    cropState.textContent = on ? "On" : "Off";
+  } catch (e) {
+    cropState.textContent = "Error";
+  }
+}
+
 // --- HDFury Vertex (serial via FTDI) ---
 function escHtml(s) {
   return String(s).replace(/[&<>"]/g, (c) =>
@@ -403,6 +417,14 @@ hdrToggle.addEventListener("change", () => {
       hdrState.textContent = "Error";
     });
 });
+cropToggle.addEventListener("change", () => {
+  const target = cropToggle.checked ? "1" : "0";
+  fetch(`/api/crop/${target}`)
+    .then(() => fetchCropState())
+    .catch(() => {
+      cropState.textContent = "Error";
+    });
+});
 
 // Vertex input buttons + hotplug + manual refresh
 document.querySelectorAll("[data-vinput]").forEach((btn) => {
@@ -430,6 +452,7 @@ setInterval(() => {
   fetchTableState();
   fetchGamewallState();
   fetchHdrState();
+  fetchCropState();
 }, 5000);
 
 // Kick off auto-refresh and initial state sync
@@ -537,6 +560,7 @@ fetchDisplayState();
 fetchTableState();
 fetchGamewallState();
 fetchHdrState();
+fetchCropState();
 fetchVertexInfo();
 fetchShutterState();
 

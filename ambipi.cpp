@@ -889,7 +889,6 @@ cv::Mat AmbiPi::createTestImage(int w, int h)
 void AmbiPi::updateCropRect(cv::Mat frame)
 {
 	std::lock_guard<std::recursive_mutex> lock(_mutex);
-	fprintf(stderr, "updateCropRect(%dx%d)\n", frame.cols, frame.rows);
 	int minX = 0;
 	int minY = 0;
 	int maxX = frame.cols-1;
@@ -942,13 +941,17 @@ void AmbiPi::updateCropRect(cv::Mat frame)
 	
 	// fprintf(stderr, "cropBorder(%dx%d -> %d,%d %dx%d)\n", frame.cols, frame.rows, minX, minY, maxX-minX+1,maxY-minY+1);
 	_cropRect = cv::Rect(minX,minY, maxX-minX+1, maxY-minY+1);
-	fprintf(stderr, "updateCropRect(%dx%d) -> %d,%d %dx%d\n", frame.cols, frame.rows, minX,minY, maxX-minX+1, maxY-minY+1);
 }
 
 
 cv::Mat AmbiPi::cropBorders(cv::Mat frame, bool debug) const
 {
 	std::lock_guard<std::recursive_mutex> lock(_mutex);
+	// Safety: if the cached crop rect doesn't fully fit the current frame (e.g.
+	// just after a capture-resolution change, before updateCropRect re-ran),
+	// skip cropping this frame instead of indexing out of bounds.
+	if (frame.empty() || (_cropRect & cv::Rect(0, 0, frame.cols, frame.rows)) != _cropRect)
+		return frame;
 	cv::Mat cropped = frame(_cropRect);
 	cv::Mat out;
 	

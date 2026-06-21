@@ -88,6 +88,7 @@ int main(int argc, char *argv[])
 	cv::VideoCapture* capture = nullptr;
 	time_t lastGoodFrame = 0;   // last time a frame was successfully grabbed
 	time_t lastRecovery  = 0;   // last time we attempted USB/capture recovery
+	time_t lastCrop      = 0;   // last time the letterbox crop rect was recomputed
 
 	time_t t = time(NULL);
 	int fps = 0;
@@ -214,6 +215,14 @@ int main(int argc, char *argv[])
 					capture = nullptr;
 					sleep = 100;
 				} else {
+					// Letterbox/black-bar crop (toggle /api/crop, default off): recompute
+					// the content rect ~1x/s (Canny is costly), then stretch content to fill
+					// every frame. Done before setLastFrame so the preview mirrors the LEDs.
+					if (ambiPi.croppingEnabled()) {
+						time_t nowc = time(NULL);
+						if (nowc != lastCrop) { ambiPi.updateCropRect(frame); lastCrop = nowc; }
+						frame = ambiPi.cropBorders(frame, false);
+					}
 					// HDR->SDR compensation now happens inside calculateAmbilightFromFrame,
 					// on the small downsampled edge strips (cheap) — not on the full frame.
 					lastGoodFrame = time(NULL);
@@ -248,7 +257,6 @@ int main(int argc, char *argv[])
 		if (t != t2) {
 			t = t2;
 			fps = 0;
-			ambiPi.setUpdateCropRect(true);
 		}
 #ifdef _GUI_
 		int key = cv::waitKey(10);
