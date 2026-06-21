@@ -33,15 +33,19 @@ const displayState = document.getElementById("displayState");
 const tableState = document.getElementById("tableState");
 const gamewallToggle = document.getElementById("gamewallToggle");
 const gamewallState = document.getElementById("gamewallState");
-const swaprbToggle = document.getElementById("swaprbToggle");
-const swaprbState = document.getElementById("swaprbState");
 const hdrToggle = document.getElementById("hdrToggle");
 const hdrState = document.getElementById("hdrState");
 const vertexInfo = document.getElementById("vertexInfo");
 const vertexConn = document.getElementById("vertexConn");
 const previewToggle = document.getElementById("previewToggle");
 const capresSelect = document.getElementById("capresSelect");
+const fpsSelect = document.getElementById("fpsSelect");
 let previewOn = localStorage.getItem("ambi_preview") !== "off";
+let previewFps = (() => {
+  const v = parseInt(localStorage.getItem("ambi_fps"), 10);
+  return [1, 2, 5, 10, 15].includes(v) ? v : 1;
+})();
+let refreshIntervalMs = Math.round(1000 / previewFps);
 
 // Apply stored or system theme preference
 let dark = (() => {
@@ -74,7 +78,7 @@ let lastTimestamp = 0;
 function updateImage(force = false) {
   if (!force && document.hidden) return; // conserve when tab not visible
   const now = Date.now();
-  if (now - lastTimestamp < 900) return; // throttle ~1s
+  if (now - lastTimestamp < refreshIntervalMs * 0.8) return; // throttle to chosen FPS
   lastTimestamp = now;
 
   const newImg = new Image();
@@ -105,7 +109,7 @@ function updateImage(force = false) {
 function startAutoRefresh() {
   if (intervalHandle) clearInterval(intervalHandle);
   if (!previewOn) return;
-  intervalHandle = setInterval(() => updateImage(), 1000);
+  intervalHandle = setInterval(() => updateImage(), refreshIntervalMs);
 }
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden && previewOn) updateImage(true);
@@ -216,6 +220,58 @@ gammaSlider.addEventListener("input", () => {
   }, 150);
 });
 
+// Debounced smoothing (alpha) slider — exponential time-smoothing of the LED
+// colors (higher = more of the previous frame kept = slower/calmer response).
+const alphaSlider = document.getElementById("alpha");
+const alphaLabel = document.getElementById("alphavalue");
+let alphaTimeout = null;
+if (alphaSlider) {
+  fetch("/api/alpha")
+    .then((r) => r.text())
+    .then((t) => {
+      const v = parseFloat(t);
+      if (!isNaN(v)) {
+        alphaSlider.value = v.toFixed(2);
+        if (alphaLabel) alphaLabel.textContent = v.toFixed(2);
+      }
+    })
+    .catch(() => {});
+  alphaSlider.addEventListener("input", () => {
+    const v = alphaSlider.value;
+    if (alphaLabel) alphaLabel.textContent = v;
+    if (alphaTimeout) clearTimeout(alphaTimeout);
+    alphaTimeout = setTimeout(() => {
+      fetch(`/api/alpha/${v}`).catch(() => {});
+    }, 150);
+  });
+}
+
+// HDR→SDR calibration sliders (saturation / tint / temperature). Debounced;
+// the backend folds these into one matrix, so changing them is cheap.
+[
+  ["hdrsat", "/api/hdrsat"],
+  ["hdrtint", "/api/hdrtint"],
+  ["hdrtemp", "/api/hdrtemp"],
+].forEach(([id, url]) => {
+  const s = document.getElementById(id);
+  const lbl = document.getElementById(id + "value");
+  if (!s) return;
+  let to = null;
+  fetch(url)
+    .then((r) => r.text())
+    .then((t) => {
+      const v = parseFloat(t);
+      if (!isNaN(v)) { s.value = v; if (lbl) lbl.textContent = v.toFixed(2); }
+    })
+    .catch(() => {});
+  s.addEventListener("input", () => {
+    const v = s.value;
+    if (lbl) lbl.textContent = parseFloat(v).toFixed(2);
+    if (to) clearTimeout(to);
+    to = setTimeout(() => { fetch(`${url}/${v}`).catch(() => {}); }, 150);
+  });
+});
+
 // Display / Table state sync and toggles
 
 async function fetchDisplayState() {
@@ -260,19 +316,6 @@ async function fetchGamewallState() {
   }
 }
 
-async function fetchSwaprbState() {
-  try {
-    const res = await fetch("/api/swaprb");
-    if (!res.ok) throw new Error("bad");
-    const raw = await res.text();
-    const on = raw.trim() === "true";
-    swaprbToggle.checked = on;
-    swaprbState.textContent = on ? "On" : "Off";
-  } catch (e) {
-    swaprbState.textContent = "Error";
-  }
-}
-
 async function fetchHdrState() {
   try {
     const res = await fetch("/api/hdr");
@@ -312,6 +355,12 @@ async function fetchVertexInfo() {
       "<strong>HDCP:</strong> " + escHtml(j.hdcp || "—") + "<br>" +
       "<strong>EDID:</strong> " + edid + "<br>" +
       "<strong>Autosw:</strong> " + escHtml(j.autosw || "—");
+    // Highlight the active input in the Top/Bottom segment (best-effort match).
+    const inp = String(j.input || "").toLowerCase();
+    document.querySelectorAll("[data-vinput]").forEach((b) => {
+      const v = b.getAttribute("data-vinput");
+      b.classList.toggle("active", inp.indexOf(v) >= 0);
+    });
   } catch (e) {
     if (vertexConn) {
       vertexConn.textContent = "● offline";
@@ -344,14 +393,6 @@ gamewallToggle.addEventListener("change", () => {
     .then(() => fetchGamewallState())
     .catch(() => {
       gamewallState.textContent = "Error";
-    });
-});
-swaprbToggle.addEventListener("change", () => {
-  const target = swaprbToggle.checked ? "1" : "0";
-  fetch(`/api/swaprb/${target}`)
-    .then(() => fetchSwaprbState())
-    .catch(() => {
-      swaprbState.textContent = "Error";
     });
 });
 hdrToggle.addEventListener("change", () => {
@@ -388,7 +429,6 @@ setInterval(() => {
   fetchDisplayState();
   fetchTableState();
   fetchGamewallState();
-  fetchSwaprbState();
   fetchHdrState();
 }, 5000);
 
@@ -430,11 +470,45 @@ if (capresSelect) {
   });
 }
 
-// Beamer (JMGO) power via ADB
+// Preview FPS dropdown -> client-side refresh interval (persisted, frontend-only).
+function applyFps() {
+  if (fpsSelect) fpsSelect.value = String(previewFps);
+  refreshIntervalMs = Math.round(1000 / previewFps);
+  if (previewOn) startAutoRefresh(); // restart the timer with the new interval
+}
+if (fpsSelect) {
+  fpsSelect.addEventListener("change", () => {
+    const v = parseInt(fpsSelect.value, 10);
+    if (v) {
+      previewFps = v;
+      localStorage.setItem("ambi_fps", String(v));
+      applyFps();
+    }
+  });
+}
+
+// Beamer (JMGO) power via Android TV Remote v2
 const beamerOnBtn = document.getElementById("beamerOn");
 const beamerOffBtn = document.getElementById("beamerOff");
 if (beamerOnBtn) beamerOnBtn.addEventListener("click", () => fetch("/api/beamer/on").catch(() => {}));
 if (beamerOffBtn) beamerOffBtn.addEventListener("click", () => fetch("/api/beamer/off").catch(() => {}));
+
+// Beamer media/volume keys (sent via the ATV remote; each takes ~2s).
+[
+  ["beamerVolDown", "/api/beamer/voldown"],
+  ["beamerVolUp", "/api/beamer/volup"],
+  ["beamerMute", "/api/beamer/mute"],
+  ["beamerPlayPause", "/api/beamer/playpause"],
+].forEach(([id, url]) => {
+  const b = document.getElementById(id);
+  if (b) b.addEventListener("click", () => { b.disabled = true; fetch(url).catch(() => {}).finally(() => { b.disabled = false; }); });
+});
+
+// Apple TV power (proxied through NodeRED -> pyatv on garagecache)
+const appletvOnBtn = document.getElementById("appletvOn");
+const appletvOffBtn = document.getElementById("appletvOff");
+if (appletvOnBtn) appletvOnBtn.addEventListener("click", () => fetch("/api/appletv/on").catch(() => {}));
+if (appletvOffBtn) appletvOffBtn.addEventListener("click", () => fetch("/api/appletv/off").catch(() => {}));
 
 // Garagenrollo / Shutter (Becker Centronic): open == DOWN, close == UP, halt == stop
 async function fetchShutterState() {
@@ -456,12 +530,12 @@ if (shutterOpenBtn) shutterOpenBtn.addEventListener("click", () => fetch("/api/s
 if (shutterCloseBtn) shutterCloseBtn.addEventListener("click", () => fetch("/api/shutter/close").then(() => setTimeout(fetchShutterState, 400)).catch(() => {}));
 if (shutterHaltBtn) shutterHaltBtn.addEventListener("click", () => fetch("/api/shutter/halt").then(() => setTimeout(fetchShutterState, 400)).catch(() => {}));
 
+applyFps();
 applyPreviewState();
 fetchCapRes();
 fetchDisplayState();
 fetchTableState();
 fetchGamewallState();
-fetchSwaprbState();
 fetchHdrState();
 fetchVertexInfo();
 fetchShutterState();

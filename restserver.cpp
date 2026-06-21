@@ -3,6 +3,10 @@
 #include "json.hpp"
 #include <algorithm>
 #include <cstdlib>
+#include <cstring>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <unistd.h>
 // #include <nlohmann/json.hpp>
 
 
@@ -17,11 +21,14 @@ RESTServer::RESTServer(AmbiPi* ambiPi) : _ambiPi(ambiPi)
 	Rest::Routes::Get(_router, "/api/gamewall/:enabled", Rest::Routes::bind(&RESTServer::setGameWallAmbilight, this));
 	Rest::Routes::Get(_router, "/api/gamewall",        Rest::Routes::bind(&RESTServer::getGameWallAmbilight, this));
 
-	Rest::Routes::Get(_router, "/api/swaprb/:enabled", Rest::Routes::bind(&RESTServer::setSwapRB, this));
-	Rest::Routes::Get(_router, "/api/swaprb",          Rest::Routes::bind(&RESTServer::getSwapRB, this));
-
 	Rest::Routes::Get(_router, "/api/hdr/:enabled", Rest::Routes::bind(&RESTServer::setHdrComp, this));
 	Rest::Routes::Get(_router, "/api/hdr",          Rest::Routes::bind(&RESTServer::getHdrComp, this));
+	Rest::Routes::Get(_router, "/api/hdrsat/:v",  Rest::Routes::bind(&RESTServer::setHdrSat, this));
+	Rest::Routes::Get(_router, "/api/hdrsat",     Rest::Routes::bind(&RESTServer::getHdrSat, this));
+	Rest::Routes::Get(_router, "/api/hdrtint/:v", Rest::Routes::bind(&RESTServer::setHdrTint, this));
+	Rest::Routes::Get(_router, "/api/hdrtint",    Rest::Routes::bind(&RESTServer::getHdrTint, this));
+	Rest::Routes::Get(_router, "/api/hdrtemp/:v", Rest::Routes::bind(&RESTServer::setHdrTemp, this));
+	Rest::Routes::Get(_router, "/api/hdrtemp",    Rest::Routes::bind(&RESTServer::getHdrTemp, this));
 
 	Rest::Routes::Get(_router, "/api/vertex/info",            Rest::Routes::bind(&RESTServer::getVertexInfo, this));
 	Rest::Routes::Get(_router, "/api/vertex/get/:key",        Rest::Routes::bind(&RESTServer::getVertex, this));
@@ -33,6 +40,13 @@ RESTServer::RESTServer(AmbiPi* ambiPi) : _ambiPi(ambiPi)
 
 	Rest::Routes::Get(_router, "/api/beamer/off", Rest::Routes::bind(&RESTServer::beamerOff, this));
 	Rest::Routes::Get(_router, "/api/beamer/on",  Rest::Routes::bind(&RESTServer::beamerOn, this));
+	Rest::Routes::Get(_router, "/api/beamer/volup",     Rest::Routes::bind(&RESTServer::beamerVolUp, this));
+	Rest::Routes::Get(_router, "/api/beamer/voldown",   Rest::Routes::bind(&RESTServer::beamerVolDown, this));
+	Rest::Routes::Get(_router, "/api/beamer/mute",      Rest::Routes::bind(&RESTServer::beamerMute, this));
+	Rest::Routes::Get(_router, "/api/beamer/playpause", Rest::Routes::bind(&RESTServer::beamerPlayPause, this));
+
+	Rest::Routes::Get(_router, "/api/appletv/on",  Rest::Routes::bind(&RESTServer::appleTvOn, this));
+	Rest::Routes::Get(_router, "/api/appletv/off", Rest::Routes::bind(&RESTServer::appleTvOff, this));
 
 	Rest::Routes::Get(_router, "/api/shutter",                Rest::Routes::bind(&RESTServer::getShutterStatus, this));
 	Rest::Routes::Get(_router, "/api/shutter/open",           Rest::Routes::bind(&RESTServer::shutterOpen,  this));
@@ -168,15 +182,14 @@ void RESTServer::getScreenshot(const Rest::Request& request, Http::ResponseWrite
 	(void) request;
 	// cv::Mat frame = _ambiPi->frameBuffer()->grabFrame(2, true);
 	cv::Mat frame = _ambiPi->lastFrame();
-	cv::resize(frame, frame, cv::Size(320*3, 240*3), 0, 0, cv::INTER_LINEAR);
-//	frame = _ambiPi->cropBorders(frame, true);
-	
+	// getDebugFrame normalizes to 960x540 itself — no pre-resize needed (and it
+	// keeps HDR comp on the smaller image).
 	frame = _ambiPi->getDebugFrame(frame);
 
 	std::vector<uchar> buf;
 	std::vector<int> param(2);
 	param[0] = cv::IMWRITE_JPEG_QUALITY;
-	param[1] = 95;
+	param[1] = 75;
 	cv::imencode(".jpg", frame, buf, param);
 	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, std::string{buf.begin(), buf.end()}, MIME(Image, Jpeg));
@@ -354,23 +367,6 @@ void RESTServer::getGameWallAmbilight(const Rest::Request &request, Http::Respon
 	response.send(Http::Code::Ok, resp);
 }
 
-void RESTServer::setSwapRB(const Rest::Request &request, Http::ResponseWriter response)
-{
-	bool enabled = request.param(":enabled").as<bool>();
-	std::string resp = enabled ? "true\n" : "false\n";
-	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
-	response.send(Http::Code::Ok, resp);
-	_ambiPi->setSwapRB(enabled);
-}
-
-void RESTServer::getSwapRB(const Rest::Request &request, Http::ResponseWriter response)
-{
-	(void) request;
-	std::string resp = _ambiPi->getSwapRB() ? "true\n" : "false\n";
-	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
-	response.send(Http::Code::Ok, resp);
-}
-
 void RESTServer::setHdrComp(const Rest::Request &request, Http::ResponseWriter response)
 {
 	bool enabled = request.param(":enabled").as<bool>();
@@ -386,6 +382,48 @@ void RESTServer::getHdrComp(const Rest::Request &request, Http::ResponseWriter r
 	std::string resp = _ambiPi->getHdrComp() ? "true\n" : "false\n";
 	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, resp);
+}
+
+void RESTServer::setHdrSat(const Rest::Request &request, Http::ResponseWriter response)
+{
+	float v = request.param(":v").as<double>();
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, std::to_string(v) + "\n");
+	_ambiPi->setHdrSat(v);
+}
+void RESTServer::getHdrSat(const Rest::Request &request, Http::ResponseWriter response)
+{
+	(void) request;
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, std::to_string(_ambiPi->getHdrSat()) + "\n");
+}
+
+void RESTServer::setHdrTint(const Rest::Request &request, Http::ResponseWriter response)
+{
+	float v = request.param(":v").as<double>();
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, std::to_string(v) + "\n");
+	_ambiPi->setHdrTint(v);
+}
+void RESTServer::getHdrTint(const Rest::Request &request, Http::ResponseWriter response)
+{
+	(void) request;
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, std::to_string(_ambiPi->getHdrTint()) + "\n");
+}
+
+void RESTServer::setHdrTemp(const Rest::Request &request, Http::ResponseWriter response)
+{
+	float v = request.param(":v").as<double>();
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, std::to_string(v) + "\n");
+	_ambiPi->setHdrTemp(v);
+}
+void RESTServer::getHdrTemp(const Rest::Request &request, Http::ResponseWriter response)
+{
+	(void) request;
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, std::to_string(_ambiPi->getHdrTemp()) + "\n");
 }
 
 // --- HDFury Vertex serial control (FTDI on 3.5mm RS232 jack) ---------------
@@ -494,6 +532,92 @@ void RESTServer::beamerOn(const Rest::Request &request, Http::ResponseWriter res
 {
 	(void) request;
 	bool ok = _atv.powerOn();
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, ok ? "ok\n" : "error\n");
+}
+
+// Beamer media/volume keys via the Android TV Remote (generic key inject).
+// Android keycodes: VOLUME_UP=24, VOLUME_DOWN=25, VOLUME_MUTE=164,
+// MEDIA_PLAY_PAUSE=85.
+void RESTServer::beamerVolUp(const Rest::Request &request, Http::ResponseWriter response)
+{
+	(void) request;
+	bool ok = _atv.sendKey(24);
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, ok ? "ok\n" : "error\n");
+}
+
+void RESTServer::beamerVolDown(const Rest::Request &request, Http::ResponseWriter response)
+{
+	(void) request;
+	bool ok = _atv.sendKey(25);
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, ok ? "ok\n" : "error\n");
+}
+
+void RESTServer::beamerMute(const Rest::Request &request, Http::ResponseWriter response)
+{
+	(void) request;
+	bool ok = _atv.sendKey(164);
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, ok ? "ok\n" : "error\n");
+}
+
+void RESTServer::beamerPlayPause(const Rest::Request &request, Http::ResponseWriter response)
+{
+	(void) request;
+	bool ok = _atv.sendKey(85);
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, ok ? "ok\n" : "error\n");
+}
+
+// --- AppleTV power (routed through NodeRED) ---------------------------------
+// pyatv + the AppleTV pairing live on the NodeRED host (garagecache), not on
+// this Pi, so ambipi can't drive the AppleTV directly. We trigger the existing
+// flow's inject nodes ("Apple TV An"=atvx_on / "Apple TV Aus"=atvx_off) via the
+// NodeRED Admin API (POST /inject/:id). Server-to-server, so no browser CORS.
+static const char* NODERED_HOST = "192.168.178.11";   // garagecache.local
+static const char* NODERED_PORT = "1880";
+
+// Minimal HTTP/1.1 POST with empty body; returns true on a 2xx status line.
+static bool nodeRedInject(const std::string& injectId)
+{
+	struct addrinfo hints; memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_UNSPEC; hints.ai_socktype = SOCK_STREAM;
+	struct addrinfo* res = nullptr;
+	if (getaddrinfo(NODERED_HOST, NODERED_PORT, &hints, &res) != 0 || !res) return false;
+	int fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+	if (fd < 0) { freeaddrinfo(res); return false; }
+	struct timeval tv; tv.tv_sec = 5; tv.tv_usec = 0;
+	setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+	setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+	bool ok = false;
+	if (connect(fd, res->ai_addr, res->ai_addrlen) == 0) {
+		std::string req = "POST /inject/" + injectId + " HTTP/1.1\r\n"
+			"Host: " + NODERED_HOST + "\r\n"
+			"Content-Length: 0\r\n"
+			"Connection: close\r\n\r\n";
+		if (::send(fd, req.data(), req.size(), 0) == (ssize_t)req.size()) {
+			char buf[64]; ssize_t n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+			if (n > 0) { buf[n] = 0; ok = (strncmp(buf + 8, " 2", 2) == 0); }  // "HTTP/1.x 2xx"
+		}
+	}
+	::close(fd); freeaddrinfo(res);
+	return ok;
+}
+
+void RESTServer::appleTvOn(const Rest::Request &request, Http::ResponseWriter response)
+{
+	(void) request;
+	bool ok = nodeRedInject("atvx_on");
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, ok ? "ok\n" : "error\n");
+}
+
+void RESTServer::appleTvOff(const Rest::Request &request, Http::ResponseWriter response)
+{
+	(void) request;
+	bool ok = nodeRedInject("atvx_off");
 	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, ok ? "ok\n" : "error\n");
 }

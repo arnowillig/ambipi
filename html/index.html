@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport"
@@ -16,207 +16,205 @@
       </button>
     </header>
 
-    <div class="cards">
-      <!-- Screenshot card -->
-      <div class="card" aria-label="Live screenshot">
+    <!-- Live preview -->
+    <div class="card">
+      <div class="inline-label">
+        <strong style="flex:1;">Live Preview</strong>
+        <span class="small-text">Vorschau</span>
+        <label class="switch" title="Web-Preview an/aus">
+          <input type="checkbox" id="previewToggle" aria-label="Web preview on/off" checked />
+          <span class="slider-switch"></span>
+        </label>
+      </div>
+      <div class="image-wrapper">
+        <img id="img" src="/api/screenshot.jpg" alt="Screenshot" class="responsive" />
+      </div>
+      <div class="inline-label">
+        <span class="small-text" style="flex:1;">Capture-Auflösung</span>
+        <select id="capresSelect" aria-label="Capture resolution">
+          <option value="1920x1080">1920×1080</option>
+          <option value="1280x720">1280×720</option>
+          <option value="1024x768">1024×768</option>
+          <option value="800x600">800×600</option>
+          <option value="640x480">640×480</option>
+        </select>
+        <select id="fpsSelect" aria-label="Preview FPS" title="Vorschau-Bildrate">
+          <option value="1">1 FPS</option>
+          <option value="2">2 FPS</option>
+          <option value="5">5 FPS</option>
+          <option value="10">10 FPS</option>
+          <option value="15">15 FPS</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- AmbiLight & modes -->
+    <div class="card">
+      <div class="inline-label">
+        <strong style="flex:1;">AmbiLight &amp; Modi</strong>
+        <input type="color" id="color" name="color" value="#e66465" aria-label="AmbiLight color picker" />
+      </div>
+      <div class="group">
+        <button class="btn" id="ambilight">AmbiLight</button>
+        <button class="btn" id="rainbow">Rainbow</button>
+        <button class="btn" id="vegas">Las Vegas</button>
+        <button class="btn" id="knightrider">Knightrider</button>
+        <button class="btn" id="testpattern">Test</button>
+        <button class="btn" id="white">Warm</button>
+        <button class="btn" id="off">Off</button>
+      </div>
+      <div class="slider-wrapper">
         <div class="inline-label">
-          <div style="flex:1;">
-            <strong>Live Screenshot</strong>
-            <div class="small-text">Tap to refresh; updates automatically when visible.</div>
-          </div>
-<!--
-         <div class="status" id="updateStatus">Updating...</div>
--->
-          <label class="switch" style="margin-left:8px;" title="Web-Preview an/aus">
-            <input type="checkbox" id="previewToggle" aria-label="Web preview on/off" checked />
+          <label for="bri" style="flex:1;">Helligkeit</label>
+          <span class="small-text"><span id="brivalue">100</span>%</span>
+        </div>
+        <input type="range" min="0" max="100" value="100" name="bri" id="bri" class="slider" aria-label="Brightness slider" />
+      </div>
+      <div class="slider-wrapper">
+        <div class="inline-label">
+          <label for="gamma" style="flex:1;">Gamma</label>
+          <span class="small-text" id="gammavalue">1.73</span>
+        </div>
+        <input type="range" min="0" max="4" value="1.73" step="0.01" name="gamma" id="gamma" class="slider" aria-label="Gamma slider" />
+      </div>
+      <div class="slider-wrapper">
+        <div class="inline-label">
+          <label for="alpha" style="flex:1;">Glättung <span class="small-text">(höher = träger)</span></label>
+          <span class="small-text" id="alphavalue">0.50</span>
+        </div>
+        <input type="range" min="0" max="0.95" value="0.5" step="0.05" name="alpha" id="alpha" class="slider" aria-label="Smoothing slider" />
+      </div>
+    </div>
+
+    <!-- HDR→SDR calibration -->
+    <div class="card">
+      <strong>HDR→SDR Kalibrierung</strong>
+      <div class="small-text">Nur aktiv bei HDR→SDR. Default = neutral.</div>
+      <div class="slider-wrapper">
+        <div class="inline-label">
+          <label for="hdrsat" style="flex:1;">Sättigung</label>
+          <span class="small-text" id="hdrsatvalue">1.00</span>
+        </div>
+        <input type="range" min="0" max="2" value="1" step="0.01" id="hdrsat" class="slider" aria-label="HDR saturation" />
+      </div>
+      <div class="slider-wrapper">
+        <div class="inline-label">
+          <label for="hdrtint" style="flex:1;">Tint <span class="small-text">(Grün ↔ Magenta)</span></label>
+          <span class="small-text" id="hdrtintvalue">0.00</span>
+        </div>
+        <input type="range" min="-1" max="1" value="0" step="0.01" id="hdrtint" class="slider" aria-label="HDR tint green-magenta" />
+      </div>
+      <div class="slider-wrapper">
+        <div class="inline-label">
+          <label for="hdrtemp" style="flex:1;">Temperatur <span class="small-text">(Warm ↔ Kalt)</span></label>
+          <span class="small-text" id="hdrtempvalue">0.00</span>
+        </div>
+        <input type="range" min="-1" max="1" value="0" step="0.01" id="hdrtemp" class="slider" aria-label="HDR temperature warm-cool" />
+      </div>
+    </div>
+
+    <!-- Outputs -->
+    <div class="card">
+      <strong>Ausgänge</strong>
+      <div class="toggle-grid">
+        <div class="toggle-item">
+          <label class="switch">
+            <input type="checkbox" id="displayToggle" aria-label="Display on/off" />
             <span class="slider-switch"></span>
           </label>
+          <div class="toggle-meta"><span>Display</span><span class="small-text" id="displayState">…</span></div>
         </div>
-        <div class="image-wrapper" style="margin-top:4px;">
-          <img id="img" src="/api/screenshot.jpg" alt="Screenshot" class="responsive" />
+        <div class="toggle-item">
+          <label class="switch">
+            <input type="checkbox" id="gamewallToggle" aria-label="GameWall on/off" />
+            <span class="slider-switch"></span>
+          </label>
+          <div class="toggle-meta"><span>GameWall</span><span class="small-text" id="gamewallState">…</span></div>
         </div>
-        <div class="inline-label" style="margin-top:8px;">
-          <label for="capresSelect"><strong>Capture-Auflösung</strong></label>
-          <select id="capresSelect" aria-label="Capture resolution" style="margin-left:auto; padding:4px 6px;">
-            <option value="1920x1080">1920×1080</option>
-            <option value="1280x720">1280×720</option>
-            <option value="1024x768">1024×768</option>
-            <option value="800x600">800×600</option>
-            <option value="640x480">640×480</option>
-          </select>
+        <div class="toggle-item">
+          <label class="switch">
+            <input type="checkbox" id="tableToggle" aria-label="Table on/off" />
+            <span class="slider-switch"></span>
+          </label>
+          <div class="toggle-meta"><span>Table</span><span class="small-text" id="tableState">…</span></div>
         </div>
-<!--
-        <div style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap;">
-          <button class="btn secondary" id="refreshBtn" aria-label="Refresh screenshot">Refresh</button>
-          <div class="small-text" style="margin-left:auto;">Last updated: <span id="lastUpdated">—</span></div>
-        </div>
--->
-      </div>
-
-      <!-- Color picker & mode card -->
-      <div class="card" aria-label="Ambilight controls">
-        <div>
-          <strong>AmbiLight & Modes</strong>
-          <div class="small-text">Set color or choose a preset lighting mode.</div>
-        </div>
-        <div class="color-input-wrapper">
-          <div>
-            <label for="color">Color</label><br />
-            <input type="color" id="color" name="color" value="#e66465" aria-label="AmbiLight color picker" />
-          </div>
-          <div style="flex:1; display:flex; gap:6px; flex-wrap:wrap;">
-            <button class="btn" id="ambilight">AmbiLight</button>
-            <button class="btn" id="rainbow">Rainbow</button>
-            <button class="btn" id="vegas">Las Vegas</button>
-            <button class="btn" id="knightrider">Knightrider</button>
-            <button class="btn" id="testpattern">Test Pattern</button>
-            <button class="btn" id="white">Warm White</button>
-            <button class="btn" id="off">Off</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Brightness & Gamma card -->
-      <div class="card" aria-label="Brightness and gamma controls">
-        <div>
-          <strong>Brightness & Gamma</strong>
-          <div class="small-text">Fine-tune intensity and gamma correction.</div>
-        </div>
-
-        <div class="slider-wrapper" aria-label="Brightness control">
-          <div class="inline-label">
-            <label for="bri">Brightness: <span id="brivalue">100</span>%</label>
-            <div style="margin-left:auto; display:flex; gap:4px; flex-wrap:wrap;">
-              <button class="btn secondary" data-bri="0">0%</button>
-              <button class="btn secondary" data-bri="25">25%</button>
-              <button class="btn secondary" data-bri="50">50%</button>
-              <button class="btn secondary" data-bri="75">75%</button>
-              <button class="btn secondary" data-bri="100">100%</button>
-            </div>
-          </div>
-          <input type="range" min="0" max="100" value="100" name="bri" id="bri" class="slider" aria-label="Brightness slider" />
-        </div>
-
-        <div class="slider-wrapper" aria-label="Gamma control">
-          <div class="inline-label">
-            <label for="gamma">Gamma: <span id="gammavalue">1.73</span></label>
-          </div>
-          <input type="range" min="0" max="4" value="1.73" step="0.01" name="gamma" id="gamma" class="slider" aria-label="Gamma slider" />
+        <div class="toggle-item">
+          <label class="switch">
+            <input type="checkbox" id="hdrToggle" aria-label="HDR to SDR compensation on/off" />
+            <span class="slider-switch"></span>
+          </label>
+          <div class="toggle-meta"><span>HDR→SDR</span><span class="small-text" id="hdrState">…</span></div>
         </div>
       </div>
     </div>
 
-      <!-- Display & Table toggles -->
-      <div class="card" aria-label="Display and Table toggles">
-        <div>
-          <strong>Display / Table</strong>
-          <div class="small-text">Toggle the display and table features on or off.</div>
-        </div>
-        <div class="toggle-row">
-          <div class="toggle-item">
-            <label class="switch">
-              <input type="checkbox" id="displayToggle" aria-label="Display on/off" />
-              <span class="slider-switch"></span>
-            </label>
-            <div style="margin-left:8px;">
-              <div><strong>Display</strong></div>
-              <div class="small-text" id="displayState">Loading…</div>
-            </div>
-          </div>
-          <div class="toggle-item">
-            <label class="switch">
-              <input type="checkbox" id="gamewallToggle" aria-label="GameWall on/off" />
-              <span class="slider-switch"></span>
-            </label>
-            <div style="margin-left:8px;">
-              <div><strong>GameWall</strong></div>
-              <div class="small-text" id="gamewallState">Loading…</div>
-            </div>
-          </div>
-          <div class="toggle-item">
-            <label class="switch">
-              <input type="checkbox" id="tableToggle" aria-label="Table on/off" />
-              <span class="slider-switch"></span>
-            </label>
-            <div style="margin-left:8px;">
-              <div><strong>Table</strong></div>
-              <div class="small-text" id="tableState">Loading…</div>
-            </div>
-          </div>
-          <div class="toggle-item">
-            <label class="switch">
-              <input type="checkbox" id="swaprbToggle" aria-label="Swap R/B on/off" />
-              <span class="slider-switch"></span>
-            </label>
-            <div style="margin-left:8px;">
-              <div><strong>Swap R/B</strong></div>
-              <div class="small-text" id="swaprbState">Loading…</div>
-            </div>
-          </div>
-          <div class="toggle-item">
-            <label class="switch">
-              <input type="checkbox" id="hdrToggle" aria-label="HDR to SDR compensation on/off" />
-              <span class="slider-switch"></span>
-            </label>
-            <div style="margin-left:8px;">
-              <div><strong>HDR→SDR</strong></div>
-              <div class="small-text" id="hdrState">Loading…</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <h2 class="section-title">Geräte</h2>
 
-    <!-- HDFury Vertex card -->
-    <div class="card" aria-label="HDFury Vertex">
-      <div class="inline-label">
-        <div style="flex:1;">
-          <strong>HDFury Vertex</strong>
-          <div class="small-text">Serial via FTDI (19200). <span id="vertexConn">…</span></div>
-        </div>
-        <button class="btn secondary" id="vertexRefresh" aria-label="Refresh Vertex info">⟳</button>
-      </div>
-      <div class="small-text" id="vertexInfo" style="margin-top:6px; line-height:1.7;">Loading…</div>
-      <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
-        <button class="btn" data-vinput="top">Input&nbsp;Top</button>
-        <button class="btn" data-vinput="bot">Input&nbsp;Bot</button>
-        <button class="btn secondary" data-vinput="thru">Thru</button>
-        <button class="btn secondary" data-vinput="swap">Swap</button>
-        <button class="btn secondary" id="vertexHotplug">Hotplug</button>
-      </div>
-    </div>
-
-    <!-- Beamer (JMGO) card -->
-    <div class="card" aria-label="Beamer JMGO">
-      <div>
-        <strong>Beamer (JMGO)</strong>
-        <div class="small-text">Ein/Aus per ADB (Netzwerk-Standby).</div>
-      </div>
-      <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
-        <button class="btn" id="beamerOn">Beamer Ein</button>
-        <button class="btn secondary" id="beamerOff">Beamer Aus</button>
-      </div>
-    </div>
-
-    <!-- Garagenrollo / Shutter (Becker Centronic) card -->
-    <div class="card" aria-label="Garagenrollo">
-      <div>
-        <strong>Garagenrollo</strong>
-        <div class="small-text">Becker Centronic Rollo. <span id="shutterInfo">…</span></div>
-      </div>
-      <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
-        <button class="btn" id="shutterOpen">Auf</button>
-        <button class="btn secondary" id="shutterHalt">Stopp</button>
-        <button class="btn" id="shutterClose">Zu</button>
-      </div>
-    </div>
-
-    <!-- External links -->
+    <!-- Beamer (JMGO) -->
     <div class="card">
       <div>
-        <strong>Quick Links</strong>
-        <div class="small-text">Jump to related services.</div>
+        <strong>Beamer (JMGO)</strong>
+        <div class="small-text">Android TV Remote v2.</div>
       </div>
+      <div class="group">
+        <button class="btn" id="beamerOn">Ein</button>
+        <button class="btn secondary" id="beamerOff">Aus</button>
+      </div>
+      <div class="group">
+        <button class="btn secondary" id="beamerVolDown">− Leiser</button>
+        <button class="btn secondary" id="beamerVolUp">+ Lauter</button>
+        <button class="btn secondary" id="beamerMute">Stumm</button>
+        <button class="btn secondary" id="beamerPlayPause">Pause / Play</button>
+      </div>
+    </div>
+
+    <div class="duo">
+      <!-- Apple TV -->
+      <div class="card">
+        <div>
+          <strong>Apple TV</strong>
+          <div class="small-text">über NodeRED (pyatv).</div>
+        </div>
+        <div class="group">
+          <button class="btn" id="appletvOn">Ein</button>
+          <button class="btn secondary" id="appletvOff">Aus</button>
+        </div>
+      </div>
+
+      <!-- Garagenrollo -->
+      <div class="card">
+        <div>
+          <strong>Garagenrollo</strong>
+          <div class="small-text">Becker Centronic. <span id="shutterInfo">…</span></div>
+        </div>
+        <div class="group">
+          <button class="btn" id="shutterOpen">Auf</button>
+          <button class="btn secondary" id="shutterHalt">Stopp</button>
+          <button class="btn" id="shutterClose">Zu</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- HDFury Vertex -->
+    <div class="card">
+      <div class="inline-label">
+        <strong style="flex:1;">HDFury Vertex</strong>
+        <span class="small-text" id="vertexConn">…</span>
+        <button class="btn secondary icon-btn" id="vertexRefresh" aria-label="Vertex-Info aktualisieren">⟳</button>
+      </div>
+      <div class="vinfo" id="vertexInfo">Loading…</div>
+      <div class="inline-label" style="margin-top:2px;">
+        <span class="small-text" style="flex:1;">Eingang</span>
+        <button class="btn secondary icon-btn" id="vertexHotplug" title="Hotplug auslösen">Hotplug</button>
+      </div>
+      <div class="seg">
+        <button class="btn" data-vinput="top">Top</button>
+        <button class="btn" data-vinput="bot">Bottom</button>
+      </div>
+    </div>
+
+    <!-- Quick links -->
+    <div class="card">
       <div class="links">
         <a href="http://garagecache.local:1880/" target="_blank" rel="noopener">NodeRED</a>
         <a href="http://ataripi.local:8080/" target="_blank" rel="noopener">Kodi</a>

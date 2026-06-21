@@ -214,12 +214,6 @@ int main(int argc, char *argv[])
 					capture = nullptr;
 					sleep = 100;
 				} else {
-					// Optional manual R/B swap (web UI toggle, persisted). Off by
-					// default since the V4L2 backend already decodes correctly; a
-					// safety net if a camera/source ever delivers swapped colors.
-					if (ambiPi.getSwapRB()) {
-						cv::cvtColor(frame, frame, cv::COLOR_RGB2BGR);
-					}
 					// HDR->SDR compensation now happens inside calculateAmbilightFromFrame,
 					// on the small downsampled edge strips (cheap) — not on the full frame.
 					lastGoodFrame = time(NULL);

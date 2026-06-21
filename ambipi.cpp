@@ -172,8 +172,11 @@ AmbiPi::AmbiPi() : _mode(Off), _alpha(0.5), _gamma(0), _enableCropping(false)
 	_enableDisplayVideo = false;
 	_enableGamingTable = false;
 	_enableGameWallAmbilight = false;
-	_swapRB = false;
 	_hdrComp = false;
+	_hdrSat = 1.0f;
+	_hdrTint = 0.0f;
+	_hdrTemp = 0.0f;
+	rebuildHdrMatrix();
 	_capWidth = 1280;
 	_capHeight = 720;
 	_capResDirty = false;
@@ -198,6 +201,7 @@ bool AmbiPi::init(double gamma)
 {
 	loadNetworkConfig();
 	loadSettings();
+	rebuildHdrMatrix();           // reflect persisted calibration knobs
 	_ws2811 = (ws2811_t *) malloc(sizeof(ws2811_t));
 	memset(_ws2811, 0, sizeof(ws2811_t));
 
@@ -757,9 +761,29 @@ if (_enableGamingTable) {
 
 cv::Mat AmbiPi::getDebugFrame(cv::Mat frame) const
 {
-	std::lock_guard<std::recursive_mutex> lock(_mutex);
-	// Match the LEDs: apply HDR->SDR to the preview too (per-request, not per-frame).
-	if (_hdrComp) compensateHDR(frame);
+	// Snapshot the shared state (LED colors + HDR flag) under the lock, then do
+	// all the heavy work (resize, HDR comp, drawing) WITHOUT the lock — a slow
+	// screenshot must not stall the ~25-FPS render loop.
+	uint32_t ch0[LEDS_LEFT + LEDS_TOP];
+	uint32_t ch1[LEDS_BOTTOM + LEDS_RIGHT];
+	bool hdr;
+	{
+		std::lock_guard<std::recursive_mutex> lock(_mutex);
+		hdr = _hdrComp;
+		const uint32_t* l0 = _ws2811 ? _ws2811->channel[0].leds : nullptr;
+		const uint32_t* l1 = _ws2811 ? _ws2811->channel[1].leds : nullptr;
+		for (int i = 0; i < LEDS_LEFT + LEDS_TOP; i++)     ch0[i] = l0 ? l0[i] : 0;
+		for (int i = 0; i < LEDS_BOTTOM + LEDS_RIGHT; i++) ch1[i] = l1 ? l1[i] : 0;
+	}
+	// Normalize the inner picture to a fixed 16:9 regardless of capture resolution
+	// (a 4:3 grab is the 16:9 source anamorphically squeezed), THEN HDR-compensate
+	// the smaller image (cheaper) to match the LEDs. The LED border is added below,
+	// so the *whole* debug frame is wider than 16:9.
+	if (frame.empty())
+		frame = cv::Mat(540, 960, CV_8UC3, cv::Scalar(0, 0, 0));   // "no signal" placeholder (avoids drawing on a 0x0 Mat -> abort)
+	else
+		cv::resize(frame, frame, cv::Size(960, 540));
+	if (hdr) compensateHDR(frame);
 	int top   = LEDS_TOP     - 2;
 	int left  = LEDS_LEFT    - 2;
 
@@ -798,28 +822,28 @@ cv::Mat AmbiPi::getDebugFrame(cv::Mat frame) const
 	frame.copyTo(out(cv::Rect(ox, oy, frame.cols, frame.rows)));
 
 	for (int x=0; x < LEDS_TOP; x++) {
-		uint32_t col = _ws2811->channel[0].leds[LEDS_LEFT+x];
+		uint32_t col = ch0[LEDS_LEFT+x];
 		cv::Vec3b colorT = cv::Vec3b((col>>0) & 0xff, (col>>8) & 0xff , (col>>16) & 0xff);
 		cv::rectangle(out, cv::Rect(oxx + (x)*dwT,oyy-dhL,dwT,dhL), colorT, -1);
 		cv::rectangle(out, cv::Rect(oxx + (x)*dwT,oyy-dhL,dwT,dhL), cv::Scalar(128,128,128), 1);
 		cv::putText(out, std::to_string(LEDS_LEFT+x), cv::Point(oxx+(x+0.125)*dwT,oyy-1.25*dhL), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.5, cv::Scalar(128,128,128), 1, cv::LINE_AA);
 	}
 	for (int x=0; x < LEDS_BOTTOM; x++) {
-		uint32_t col = _ws2811->channel[1].leds[x];
+		uint32_t col = ch1[x];
 		cv::Vec3b colorB = cv::Vec3b((col>>0) & 0xff, (col>>8) & 0xff , (col>>16) & 0xff);
 		cv::rectangle(out, cv::Rect(oxx + (x)*dwT,oyy+LEDS_LEFT*dhL,dwT,dhL), colorB, -1);
 		cv::rectangle(out, cv::Rect(oxx + (x)*dwT,oyy+LEDS_LEFT*dhL,dwT,dhL), cv::Scalar(128,128,128), 1);
 		cv::putText(out, std::to_string(x), cv::Point(oxx+(x+0.125)*dwT,oyy+(LEDS_LEFT+1.5)*dhL + 2), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.5, cv::Scalar(128,128,128), 1, cv::LINE_AA);
 	}
 	for (int y=0; y < LEDS_LEFT; y++) {
-		uint32_t col = _ws2811->channel[0].leds[LEDS_LEFT-y-1];
+		uint32_t col = ch0[LEDS_LEFT-y-1];
 		cv::Vec3b colorL = cv::Vec3b((col>>0) & 0xff, (col>>8) & 0xff , (col>>16) & 0xff);
 		cv::rectangle(out, cv::Rect(oxx-dwT, oyy + (y)*dhL, dwT, dhL), colorL, -1);
 		cv::rectangle(out, cv::Rect(oxx-dwT, oyy + (y)*dhL, dwT, dhL), cv::Scalar(128,128,128), 1);
 		cv::putText(out, std::to_string(LEDS_LEFT-y-1), cv::Point(oxx-2*dwT - 4, oyy + (y+0.75)*dhL), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.5, cv::Scalar(128,128,128), 1, cv::LINE_AA);
 	}
 	for (int y=0; y < LEDS_RIGHT; y++) {
-		uint32_t col = _ws2811->channel[1].leds[LEDS_BOTTOM+LEDS_RIGHT-y-1];
+		uint32_t col = ch1[LEDS_BOTTOM+LEDS_RIGHT-y-1];
 		cv::Vec3b colorL = cv::Vec3b((col>>0) & 0xff, (col>>8) & 0xff , (col>>16) & 0xff);
 		cv::rectangle(out, cv::Rect(oxx+(LEDS_TOP*dwT), oyy + (y)*dhL, dwT, dhL), colorL, -1);
 		cv::rectangle(out, cv::Rect(oxx+(LEDS_TOP*dwT), oyy + (y)*dhL, dwT, dhL), cv::Scalar(128,128,128), 1);
@@ -1544,19 +1568,6 @@ void AmbiPi::setEnableGameWallAmbilight(bool enable)
     _enableGameWallAmbilight = enable;
 }
 
-bool AmbiPi::getSwapRB() const
-{
-    std::lock_guard<std::recursive_mutex> lock(_mutex);
-    return _swapRB;
-}
-
-void AmbiPi::setSwapRB(bool swap)
-{
-    std::lock_guard<std::recursive_mutex> lock(_mutex);
-    _swapRB = swap;
-    saveSettings();
-}
-
 bool AmbiPi::getHdrComp() const
 {
     std::lock_guard<std::recursive_mutex> lock(_mutex);
@@ -1568,6 +1579,26 @@ void AmbiPi::setHdrComp(bool on)
     std::lock_guard<std::recursive_mutex> lock(_mutex);
     _hdrComp = on;
     saveSettings();
+}
+
+float AmbiPi::getHdrSat() const  { std::lock_guard<std::recursive_mutex> lock(_mutex); return _hdrSat; }
+float AmbiPi::getHdrTint() const { std::lock_guard<std::recursive_mutex> lock(_mutex); return _hdrTint; }
+float AmbiPi::getHdrTemp() const { std::lock_guard<std::recursive_mutex> lock(_mutex); return _hdrTemp; }
+
+void AmbiPi::setHdrSat(float v)
+{
+    std::lock_guard<std::recursive_mutex> lock(_mutex);
+    _hdrSat = v; rebuildHdrMatrix(); saveSettings();
+}
+void AmbiPi::setHdrTint(float v)
+{
+    std::lock_guard<std::recursive_mutex> lock(_mutex);
+    _hdrTint = v; rebuildHdrMatrix(); saveSettings();
+}
+void AmbiPi::setHdrTemp(float v)
+{
+    std::lock_guard<std::recursive_mutex> lock(_mutex);
+    _hdrTemp = v; rebuildHdrMatrix(); saveSettings();
 }
 
 int AmbiPi::getCaptureWidth() const
@@ -1617,6 +1648,9 @@ void AmbiPi::compensateHDR(cv::Mat& m) const
 
     // PQ (ST.2084) EOTF -> linear (fraction of 10000 nits), precomputed LUT.
     static float pqLin[256];
+    // Output gamma (1/2.2) as a LUT too: linear [0,1] in 4096 steps -> 8-bit.
+    // Avoids ~3 pow() per pixel, which dominated the preview cost (~200 ms).
+    static unsigned char gOut[4096];
     static bool inited = false;
     if (!inited) {
         const double m1 = 0.1593017578125, m2 = 78.84375;
@@ -1628,26 +1662,77 @@ void AmbiPi::compensateHDR(cv::Mat& m) const
             double den = c2 - c3 * e;
             pqLin[i]   = (float) pow(num / den, 1.0 / m1);
         }
+        for (int i = 0; i < 4096; ++i)
+            gOut[i] = (unsigned char)(pow(i / 4095.0, 1.0 / 2.2) * 255.0 + 0.5);
         inited = true;
     }
-    const float scale = 50.0f;        // 200-nit diffuse white -> SDR 1.0 (10000/200)
-    const float invG  = 1.0f / 2.2f;
+    // Snapshot the combined linear matrix (BT.2020->709 * saturation * tint/temp
+    // gains * exposure scale). It is rebuilt only when a calibration knob changes
+    // (rebuildHdrMatrix), NEVER per pixel — so the knobs cost 0 per-pixel ops.
+    // Local copy: register-friendly; a concurrent slider drag is benign (1 frame).
+    const float m00 = _hdrMat[0][0], m01 = _hdrMat[0][1], m02 = _hdrMat[0][2];
+    const float m10 = _hdrMat[1][0], m11 = _hdrMat[1][1], m12 = _hdrMat[1][2];
+    const float m20 = _hdrMat[2][0], m21 = _hdrMat[2][1], m22 = _hdrMat[2][2];
     for (int y = 0; y < m.rows; ++y) {
         cv::Vec3b* p = m.ptr<cv::Vec3b>(y);
         for (int x = 0; x < m.cols; ++x) {
             float b = pqLin[p[x][0]], g = pqLin[p[x][1]], r = pqLin[p[x][2]];
-            // BT.2020 -> BT.709 in linear light (fixes the green/yellow cast)
-            float R =  1.6605f * r - 0.5876f * g - 0.0728f * b;
-            float G = -0.1246f * r + 1.1329f * g - 0.0083f * b;
-            float B = -0.0182f * r - 0.1006f * g + 1.1187f * b;
-            R = R < 0 ? 0 : R * scale;  R = R > 1 ? 1 : R;
-            G = G < 0 ? 0 : G * scale;  G = G > 1 ? 1 : G;
-            B = B < 0 ? 0 : B * scale;  B = B > 1 ? 1 : B;
-            p[x][2] = (uchar)(pow(R, invG) * 255.0f + 0.5f);
-            p[x][1] = (uchar)(pow(G, invG) * 255.0f + 0.5f);
-            p[x][0] = (uchar)(pow(B, invG) * 255.0f + 0.5f);
+            float R = m00 * r + m01 * g + m02 * b;
+            float G = m10 * r + m11 * g + m12 * b;
+            float B = m20 * r + m21 * g + m22 * b;
+            // Out-of-gamut (a channel < 0): desaturate toward luma instead of
+            // clamping the channel to 0 — preserves hue (no green shift).
+            float mn = R < G ? (R < B ? R : B) : (G < B ? G : B);
+            if (mn < 0.0f) {
+                float Y = 0.2126f * R + 0.7152f * G + 0.0722f * B;
+                if (Y <= 0.0f) { R = G = B = 0.0f; }
+                else { float t = -mn / (Y - mn); R += t*(Y-R); G += t*(Y-G); B += t*(Y-B); }
+            }
+            // Hue-preserving highlight rolloff: when the brightest channel > 1,
+            // scale ALL channels by 1/max (keeps the R:G:B ratio = hue exact).
+            // This is the actual fix for "bright gold goes green".
+            float M = R > G ? (R > B ? R : B) : (G > B ? G : B);
+            if (M > 1.0f) { float inv = 1.0f / M; R *= inv; G *= inv; B *= inv; }
+            int ir = (int)(R * 4095.0f + 0.5f); ir = ir < 0 ? 0 : (ir > 4095 ? 4095 : ir);
+            int ig = (int)(G * 4095.0f + 0.5f); ig = ig < 0 ? 0 : (ig > 4095 ? 4095 : ig);
+            int ib = (int)(B * 4095.0f + 0.5f); ib = ib < 0 ? 0 : (ib > 4095 ? 4095 : ib);
+            p[x][2] = gOut[ir];
+            p[x][1] = gOut[ig];
+            p[x][0] = gOut[ib];
         }
     }
+}
+
+// Compose the per-pixel linear matrix used by compensateHDR from the current
+// calibration knobs. Called from the ctor, loadSettings, and every setHdr*()
+// setter — never in the pixel loop.
+//   _hdrMat = scale * Diag(gR,gG,gB) * Sat(_hdrSat) * M_BT2020->BT709
+void AmbiPi::rebuildHdrMatrix()
+{
+    const float scale = 50.0f;        // 200-nit diffuse white -> SDR 1.0 (10000/200)
+    const float M[3][3] = {           // BT.2020 -> BT.709 (linear)
+        {  1.6605f, -0.5876f, -0.0728f },
+        { -0.1246f,  1.1329f, -0.0083f },
+        { -0.0182f, -0.1006f,  1.1187f },
+    };
+    const float lr = 0.2126f, lg = 0.7152f, lb = 0.0722f;   // BT.709 luma
+    const float s = _hdrSat, is = 1.0f - _hdrSat;
+    const float S[3][3] = {           // saturation: s*I + (1-s)*luma-rows
+        { s + is*lr,     is*lg,     is*lb },
+        {     is*lr, s + is*lg,     is*lb },
+        {     is*lr,     is*lg, s + is*lb },
+    };
+    float SM[3][3];
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j)
+            SM[i][j] = S[i][0]*M[0][j] + S[i][1]*M[1][j] + S[i][2]*M[2][j];
+    const float kt = 0.3f, kw = 0.3f;                       // knob sensitivities
+    const float g3[3] = { 1.0f + kw*_hdrTemp,               // R gain (temp warm)
+                          1.0f - kt*_hdrTint,               // G gain (tint -> magenta)
+                          1.0f - kw*_hdrTemp };             // B gain
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j)
+            _hdrMat[i][j] = scale * g3[i] * SM[i][j];
 }
 
 // Power-cycle the capture device's USB hub port via uhubctl, to recover the
@@ -1676,13 +1761,14 @@ void AmbiPi::loadSettings()
     if (!ifs) return;
     try {
         nlohmann::json j; ifs >> j;
-        _swapRB = j.value("swap_rb", _swapRB);
         _hdrComp = j.value("hdr_comp", _hdrComp);
+        _hdrSat = j.value("hdr_sat", _hdrSat);
+        _hdrTint = j.value("hdr_tint", _hdrTint);
+        _hdrTemp = j.value("hdr_temp", _hdrTemp);
         _capWidth = j.value("cap_width", _capWidth);
         _capHeight = j.value("cap_height", _capHeight);
         std::cerr << "[INFO] Loaded settings from " << SETTINGS_PATH
-                  << " (swap_rb=" << (_swapRB ? "true" : "false")
-                  << ", hdr_comp=" << (_hdrComp ? "true" : "false")
+                  << " (hdr_comp=" << (_hdrComp ? "true" : "false")
                   << ", cap=" << _capWidth << "x" << _capHeight << ")\n";
     } catch (const std::exception& e) {
         std::cerr << "[ERROR] settings.json parse error: " << e.what() << "\n";
@@ -1692,8 +1778,10 @@ void AmbiPi::loadSettings()
 void AmbiPi::saveSettings() const
 {
     nlohmann::json j;
-    j["swap_rb"] = _swapRB;
     j["hdr_comp"] = _hdrComp;
+    j["hdr_sat"] = _hdrSat;
+    j["hdr_tint"] = _hdrTint;
+    j["hdr_temp"] = _hdrTemp;
     j["cap_width"] = _capWidth;
     j["cap_height"] = _capHeight;
     std::ofstream ofs(SETTINGS_PATH);

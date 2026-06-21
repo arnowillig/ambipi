@@ -102,10 +102,11 @@ public:
 	void setEnableGameWallAmbilight(bool enable);
 	bool getEnableGamingTable() const;
 	void setEnableGamingTable(bool enableGamingTable);
-	bool getSwapRB() const;
-	void setSwapRB(bool swap);
 	bool getHdrComp() const;
 	void setHdrComp(bool on);
+	float getHdrSat() const;   void setHdrSat(float v);     // saturation (1.0 = neutral)
+	float getHdrTint() const;  void setHdrTint(float v);    // green<->magenta (0 = neutral)
+	float getHdrTemp() const;  void setHdrTemp(float v);    // warm<->cool (0 = neutral)
 	void compensateHDR(cv::Mat& frame) const;
 	int  getCaptureWidth() const;
 	int  getCaptureHeight() const;
@@ -130,13 +131,17 @@ private:
 	bool _enableDisplayVideo;
 	bool _enableGameWallAmbilight;
 	bool _enableGamingTable;
-	bool _swapRB;
 	bool _hdrComp;
+	float _hdrSat;
+	float _hdrTint;
+	float _hdrTemp;
+	float _hdrMat[3][3];        // precomputed (rebuildHdrMatrix); used per pixel in compensateHDR
 	int  _capWidth;
 	int  _capHeight;
 	bool _capResDirty;
 	void loadSettings();
 	void saveSettings() const;
+	void rebuildHdrMatrix();
 	std::vector<uint8_t> _lut;
 	
 	std::vector<uint8_t> lastFrame_;
