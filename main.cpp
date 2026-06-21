@@ -82,7 +82,7 @@ int main(int argc, char *argv[])
 	std::thread restThread(&restServer, &server);
 
 	cv::Mat frame;
-	ambiPi.setMode(AmbiPi::White);
+	// Mode is restored from settings.json in init() (default White on first run).
 	AmbiPi::Mode lastMode = ambiPi.mode();
 
 	cv::VideoCapture* capture = nullptr;

@@ -64,12 +64,14 @@ the LAN (a "GameWall" of WLED shelves, a gaming table, a 32×32 display, WiZ bul
 Infinite loop switching on `ambiPi.mode()`:
 - **Off / White / Color** — static fills.
 - **Rainbow / Vegas / Knightrider / TestPattern / LeftSide(goal) / RightSide(goal)** — animations.
-- **AmbiLight** — grab from a **USB capture device** `VideoCapture(0, CAP_V4L2)` at 160×120@30 (V4L2
-  backend forced — GStreamer mis-decodes the EasyCap "AV TO USB2.0" YUYV → green/R-B corruption). Then per
-  enabled output: `calculateAmbilightFromFrame` (always), `calculateDisplayFrameFromFrame`,
-  `calculateGameWallFrameFromFrame` (kicker lights call is commented out). ~40 ms/frame.
-  - **Manual R/B swap** (`getSwapRB`, `/api/swaprb`, web UI toggle, persisted to `/var/lib/ambipi/settings.json`):
-    safety net for the EasyCap, which randomly locks Cb/Cr swapped on each source (AppleTV) re-sync.
+- **AmbiLight** — grab from a **USB capture device** `VideoCapture(0, CAP_V4L2)` at a configurable
+  resolution (`/api/capres`, default 1280×720; V4L2 backend forced — GStreamer mis-decodes the grabber's
+  YUYV). Then per enabled output: `calculateAmbilightFromFrame` (always), `calculateDisplayFrameFromFrame`,
+  `calculateGameWallFrameFromFrame` (kicker lights call is commented out). Fixed `usleep(40 ms)`/iteration
+  → **~18–22 FPS** LED update rate (hard cap 25). (R/B swap was removed — V4L2 decodes correctly.)
+  - **Letterbox/black-bar crop** (`/api/crop`, web UI toggle "Crop", default off): when on, `updateCropRect`
+    (Canny, **throttled ~1×/s**) finds the content rect and `cropBorders` stretches it to fill, so the LEDs
+    sample real content, not the bars. Runs before `setLastFrame`, so the preview mirrors the LEDs.
   - **USB auto-recovery:** the EasyCap drops off USB and won't re-enumerate ("Cannot enable"). After ~15 s of
     no frames the loop calls `cycleCaptureUsbPort()` (`uhubctl -l 1-1 -p 3 -a cycle`, configurable via
     `usb_recovery`/`uhubctl_location`/`uhubctl_port` in `config.json`) then reopens the device. `uhubctl` is a
@@ -86,8 +88,17 @@ Infinite loop switching on `ambiPi.mode()`:
   (the `/api/alpha` knob = how much of the previous frame to keep). Corners set from strip ends.
 - **Gamma:** `setGamma` builds a 256-entry LUT (`buildGammaLUT`) *and* sets the ws2811 custom gamma.
   Init default gamma = **1.73** (`main.cpp`).
-- **Crop / letterbox:** `updateCropRect` uses Canny edge scan on the borders to find content rect;
-  `cropBorders` stretches content back out. Toggled via `/api/crop`.
+- **HDR→SDR** (`compensateHDR`, `/api/hdr`): per pixel — PQ EOTF (LUT) → **one combined 3×3 matrix** →
+  hue-preserving **max-scale highlight rolloff** + out-of-gamut luma-desaturate → gamma LUT (no `pow()`).
+  The matrix folds BT.2020→709 × saturation × tint/temp gains × exposure and is rebuilt **only on a knob
+  change** (`rebuildHdrMatrix`) — so the 3 calibration knobs cost **0 per-pixel ops**. Knobs (persisted):
+  `/api/hdrsat` (1=neutral), `/api/hdrtint` (green↔magenta, 0=neutral), `/api/hdrtemp` (warm↔cool, 0=neutral).
+  The max-scale rolloff is the fix for *"bright gold goes green"* (per-channel clipping shifted the hue).
+  Applied identically to the LED edge strips, the web preview, and the 32×32 display.
+- **Crop / letterbox:** `updateCropRect` (Canny edge scan → content rect) + `cropBorders` (stretches content
+  back to fill). Used in **both** AmbiLight (camera; gated by `/api/crop`, Canny throttled ~1×/s in `main.cpp`)
+  and AmbiLight2. `cropBorders` clamps `_cropRect` to the frame (no OOB after a capres change). `/api/crop`
+  sets `_enableCropping` (not persisted; like the display/table/gamewall toggles).
 - Animations: `rainbow`, `vegas`, `knightrider`, `goal` (a sweep used for LeftSide/RightSide),
   `drawTestPattern`, `fadeColors`.
 
@@ -119,10 +130,14 @@ Mostly `GET` "set" endpoints (path params), plain-text responses, CORS `*`:
 - `/api/mode/:mode` (off|ambilight|white|color|rainbow|vegas|knightrider|testpattern|leftside|rightside), `/api/mode`
 - `/api/col/:r/:g/:b`, `/api/bri[/:bri]`, `/api/gamma[/:gamma]`, `/api/alpha[/:alpha]`, `/api/crop[/:crop]`
 - `/api/display/:enabled`, `/api/table/:enabled`, `/api/gamewall[/:enabled]`
-- `/api/swaprb[/:enabled]`, `/api/hdr[/:enabled]` (HDR→SDR compensation), `/api/capres[/:w/:h]` (capture resolution)
+- `/api/hdr[/:enabled]` (HDR→SDR on/off) + `/api/hdrsat|hdrtint|hdrtemp[/:v]` (HDR calibration knobs),
+  `/api/capres[/:w/:h]` (capture resolution)
 - `/api/vertex/{info,get/:key,set/:key/:value,hotplug}` — HDFury Vertex serial control (`Vertex`)
 - `/api/beamer/on`, `/api/beamer/off` — JMGO projector power (`AtvRemote`, idempotent — see below)
-- `/api/screenshot.jpg` — JPEG of the debug frame (annotated LED layout)
+- `/api/beamer/{volup,voldown,mute,playpause}` — JMGO media/volume keys via the ATV remote (`sendKey`)
+- `/api/appletv/{on,off}` — Apple TV power, **proxied** to NodeRED `/inject/atvx_on|atvx_off` (pyatv lives on
+  `garagecache`, not this Pi; `nodeRedInject` in `restserver.cpp`, host hardcoded `192.168.178.11:1880`)
+- `/api/screenshot.jpg` — JPEG of the debug frame (inner picture normalized to 16:9 + LED border)
 - `/`, `/index.html`, `/static/*` — serves `html/`
 - `POST /api` — Alexa-style smart-home directives: `TurnOn/TurnOff/SetBrightness/SetColor/SetColorTemperature`.
   Note quirk: `SetColor` with pure blue (0,0,255) switches into **AmbiLight** mode.
@@ -150,6 +165,8 @@ until fixed):
   `remote_ping_request`(8→9) advertising feature flags **615** (`PING|KEY|POWER|VOLUME|IME|APP_LINK`), then
   wait for `remote_start`(40). **Timing matters:** a key injected immediately after `remote_start` is
   dropped — `runRemote` waits ~1.5 s before sending `remote_key_inject`(10){key_code, direction=SHORT}.
+- **Media/volume keys** (`/api/beamer/{volup,voldown,mute,playpause}`) reuse `sendKey()` (VOLUME_UP=24,
+  VOLUME_DOWN=25, VOLUME_MUTE=164, MEDIA_PLAY_PAUSE=85); each opens a fresh connect+handshake (~2 s).
 - A `key.py` reference harness (Python `androidtvremote2`) was used only to reverse-engineer the protocol;
   it is not part of the runtime. `make` links `-lssl -lcrypto`.
 
@@ -176,9 +193,15 @@ until fixed):
 | WiZ bulbs | `192.168.178.{80,87,50,53,109,127}:38899` | WiZ JSON UDP |
 | JMGO S91A beamer | `192.168.178.118:6467` (pair) / `:6466` (cmd) | Android TV Remote v2 (TLS) |
 | HDFury Vertex | `/dev/ttyUSB0` (FTDI serial) | `#<cmd>\r` @ 19200 8N1 |
+| NodeRED (Apple TV via pyatv) | `garagecache.local` `192.168.178.11:1880` | HTTP Admin API `/inject/:id` |
 
 The WLED/table/display/WiZ addresses are defaults in `NetConfig` and overridable via `config.json`.
-The beamer host is hardcoded in `AtvRemote` (default ctor arg) and the Vertex is a local serial device.
+The beamer host is hardcoded in `AtvRemote` (default ctor arg), the NodeRED host in `restserver.cpp`
+(`NODERED_HOST`), and the Vertex is a local serial device.
+
+**`settings.json`** (`/var/lib/ambipi/settings.json`, runtime UI state, separate from `config.json`):
+`hdr_comp`, `hdr_sat`, `hdr_tint`, `hdr_temp`, `cap_width`, `cap_height`. Persisted on change, loaded at
+start. (Toggles like display/table/gamewall/crop are *not* persisted.)
 
 ## Gotchas
 

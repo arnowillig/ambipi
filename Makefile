@@ -76,7 +76,7 @@ log: $(TARGET)
 DOCKER_IMAGE := ambipi-cross-armhf
 DOCKER_PLAT  := linux/arm/v7
 DEB_ARCH     := armhf
-DEB_VERSION  ?= 1.0.27
+DEB_VERSION  ?= 1.0.28
 DEPLOY_HOST  ?= pi@ataripi.local
 
 .PHONY: deb deploy docker-clean

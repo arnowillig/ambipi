@@ -158,7 +158,7 @@ std::vector<uint8_t> buildGammaLUT(float gamma_factor) {
 }
 
 
-AmbiPi::AmbiPi() : _mode(Off), _alpha(0.5), _gamma(0), _enableCropping(false)
+AmbiPi::AmbiPi() : _mode(White), _alpha(0.5), _gamma(0), _enableCropping(false)
 {
 	uint8_t r = 0;
 	uint8_t g = 0;
@@ -240,6 +240,7 @@ void AmbiPi::setUpdateCropRect(bool cropping)
 {
 	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	_enableCropping = cropping;
+	saveSettings();
 }
 
 bool AmbiPi::croppingEnabled() const
@@ -1764,6 +1765,8 @@ void AmbiPi::loadSettings()
     if (!ifs) return;
     try {
         nlohmann::json j; ifs >> j;
+        _mode = (Mode) j.value("mode", (int) _mode);
+        _enableCropping = j.value("crop", _enableCropping);
         _hdrComp = j.value("hdr_comp", _hdrComp);
         _hdrSat = j.value("hdr_sat", _hdrSat);
         _hdrTint = j.value("hdr_tint", _hdrTint);
@@ -1781,6 +1784,8 @@ void AmbiPi::loadSettings()
 void AmbiPi::saveSettings() const
 {
     nlohmann::json j;
+    j["mode"] = (int) _mode;
+    j["crop"] = _enableCropping;
     j["hdr_comp"] = _hdrComp;
     j["hdr_sat"] = _hdrSat;
     j["hdr_tint"] = _hdrTint;

@@ -38,7 +38,7 @@ public:
 	void setFrameBuffer(FrameBuffer* fb) { _fb = fb; }
 	FrameBuffer* frameBuffer() const { return _fb; }
 	
-	void setMode(Mode m) { std::lock_guard<std::recursive_mutex> lock(_mutex); _mode = m; }
+	void setMode(Mode m) { std::lock_guard<std::recursive_mutex> lock(_mutex); _mode = m; saveSettings(); }
 	Mode mode() const { std::lock_guard<std::recursive_mutex> lock(_mutex); return _mode; }
 
 	bool init(double gamma);
