@@ -370,14 +370,18 @@ async function fetchVertexInfo() {
       vertexConn.style.color = "#2faa4a";
     }
     const edid = j.edidmode
-      ? escHtml(j.edidmode) + (j.edidtable ? " (Tab " + escHtml(j.edidtable) + ")" : "")
+      ? escHtml(j.edidmode) + (j.edidtable ? " (Tab " + escHtml(j.edidtable) +
+          (j.edidtabletop ? "/" + escHtml(j.edidtabletop) : "") + ")" : "")
       : "—";
     vertexInfo.innerHTML =
       "<strong>FW:</strong> " + escHtml(j.ver || "—") + "<br>" +
-      "<strong>Input:</strong> " + escHtml(j.input || "—") + "<br>" +
-      "<strong>HDCP:</strong> " + escHtml(j.hdcp || "—") + "<br>" +
-      "<strong>EDID:</strong> " + edid + "<br>" +
-      "<strong>Autosw:</strong> " + escHtml(j.autosw || "—");
+      "<strong>Input:</strong> " + escHtml(j.input || "—") +
+        " · <strong>Scale:</strong> " + escHtml(j.scale || "—") + "<br>" +
+      "<strong>HDCP:</strong> " + escHtml(j.hdcp || "—") +
+        " · <strong>EDID:</strong> " + edid + "<br>" +
+      "<strong>HDR:</strong> " + escHtml(j.hdrcustom || "—") +
+        " · <strong>CEC:</strong> " + escHtml(j.cec || "—") +
+        " · <strong>Autosw:</strong> " + escHtml(j.autosw || "—");
     // Highlight the active input in the Top/Bottom segment (best-effort match).
     const inp = String(j.input || "").toLowerCase();
     document.querySelectorAll("[data-vinput]").forEach((b) => {

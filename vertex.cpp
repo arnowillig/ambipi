@@ -132,7 +132,8 @@ std::string Vertex::infoJson()
     if (fd >= 0) {
         bool first = true;
         jsonField(o, first, "ver", txrx(fd, "get ver", 1200));
-        const char* keys[] = { "input", "hdcp", "edidmode", "edidtable", "autosw" };
+        const char* keys[] = { "input", "hdcp", "scale", "edidmode", "edidtable",
+                               "edidtabletop", "autosw", "hdrcustom", "cec" };
         for (const char* k : keys) {
             std::string r = txrx(fd, std::string("get ") + k, 800);
             std::string prefix = std::string(k) + " ";
