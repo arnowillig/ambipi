@@ -11,6 +11,8 @@ INCLUDES += -I pistache/include/ -I /opt/vc/include
 CXXFLAGS += -Wfatal-errors -Wno-deprecated-declarations -std=c++2a $(INCLUDES) $(OPENCV_CFLAGS)
 # pthread on both compile & link
 CXXFLAGS += -pthread
+# Build version (DEB_VERSION, defined below) compiled in for /api/version
+CXXFLAGS += -DAMBIPI_VERSION='"$(DEB_VERSION)"'
 
 # --- Libraries ---
 LIBS += rpi_ws281x/build/libws2811.a
@@ -76,7 +78,7 @@ log: $(TARGET)
 DOCKER_IMAGE := ambipi-cross-armhf
 DOCKER_PLAT  := linux/arm/v7
 DEB_ARCH     := armhf
-DEB_VERSION  ?= 1.0.28
+DEB_VERSION  ?= 1.0.35
 DEPLOY_HOST  ?= pi@ataripi.local
 
 .PHONY: deb deploy docker-clean

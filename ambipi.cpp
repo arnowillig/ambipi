@@ -158,7 +158,7 @@ std::vector<uint8_t> buildGammaLUT(float gamma_factor) {
 }
 
 
-AmbiPi::AmbiPi() : _mode(White), _alpha(0.5), _gamma(0), _enableCropping(false)
+AmbiPi::AmbiPi() : _mode(White), _alpha(0.5), _gamma(0), _enableCropping(false), _hasLetterbox(false)
 {
 	uint8_t r = 0;
 	uint8_t g = 0;
@@ -767,15 +767,18 @@ cv::Mat AmbiPi::getDebugFrame(cv::Mat frame) const
 	// screenshot must not stall the ~25-FPS render loop.
 	uint32_t ch0[LEDS_LEFT + LEDS_TOP];
 	uint32_t ch1[LEDS_BOTTOM + LEDS_RIGHT];
-	bool hdr;
+	bool hdr, cropOn, lb;
+	cv::Rect cr;
 	{
 		std::lock_guard<std::recursive_mutex> lock(_mutex);
 		hdr = _hdrComp;
+		cropOn = _enableCropping; lb = _hasLetterbox; cr = _cropRect;
 		const uint32_t* l0 = _ws2811 ? _ws2811->channel[0].leds : nullptr;
 		const uint32_t* l1 = _ws2811 ? _ws2811->channel[1].leds : nullptr;
 		for (int i = 0; i < LEDS_LEFT + LEDS_TOP; i++)     ch0[i] = l0 ? l0[i] : 0;
 		for (int i = 0; i < LEDS_BOTTOM + LEDS_RIGHT; i++) ch1[i] = l1 ? l1[i] : 0;
 	}
+	const int ow = frame.cols, oh = frame.rows;   // capture dims (crop rect is in these coords)
 	// Normalize the inner picture to a fixed 16:9 regardless of capture resolution
 	// (a 4:3 grab is the 16:9 source anamorphically squeezed), THEN HDR-compensate
 	// the smaller image (cheaper) to match the LEDs. The LED border is added below,
@@ -785,6 +788,13 @@ cv::Mat AmbiPi::getDebugFrame(cv::Mat frame) const
 	else
 		cv::resize(frame, frame, cv::Size(960, 540));
 	if (hdr) compensateHDR(frame);
+	// When cropping is on, outline the detected content rect in green (preview shows
+	// the UNCROPPED frame; the LEDs use the cropped one). Scale the rect from the
+	// capture coords into the 960×540 preview.
+	if (cropOn && lb && ow > 0 && oh > 0) {
+		cv::Rect g(cr.x * 960 / ow, cr.y * 540 / oh, cr.width * 960 / ow, cr.height * 540 / oh);
+		cv::rectangle(frame, g, cv::Scalar(0, 255, 0), 2);
+	}
 	int top   = LEDS_TOP     - 2;
 	int left  = LEDS_LEFT    - 2;
 
@@ -890,90 +900,74 @@ cv::Mat AmbiPi::createTestImage(int w, int h)
 void AmbiPi::updateCropRect(cv::Mat frame)
 {
 	std::lock_guard<std::recursive_mutex> lock(_mutex);
-	int minX = 0;
-	int minY = 0;
-	int maxX = frame.cols-1;
-	int maxY = frame.rows-1;
-	
-	int i;
-	
-	cv::Mat gray;
-	cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
-	
-	cv::Canny(gray, gray, 50, 50, 3,  false);
+	if (frame.empty()) { _cropRect = cv::Rect(0, 0, 1, 1); _hasLetterbox = false; return; }
+	const int W = frame.cols, H = frame.rows;
 
-	// gray.convertTo(gray, -1, 8, 0);
-	
-	for (i=0; i<gray.cols*0.2;i++) {
-		if (cv::countNonZero(gray(cv::Rect(i,0,1,gray.rows))) > 0) {
-			break;
-		}
-	}
-	minX = i;
+	// Letterbox = solid near-black rows/cols at the edges. Detect by per-row and
+	// per-column mean brightness (two cv::reduce calls — cheap, and far more
+	// letterbox-specific than a Canny edge scan). A bar is a strip of edge
+	// rows/cols whose mean stays below T; content starts at the first one above.
+	cv::Mat gray; cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
+	cv::Mat rowM, colM;
+	// Use the per-row/col MAX brightness, not the mean: a true black bar is dark
+	// even in its brightest pixel, whereas merely DARK content (a dim scene that
+	// reaches the edge) still has some brighter pixels — so dark content is no
+	// longer mistaken for a bar (which wrongly inset the left edge before).
+	// REDUCE_MAX keeps the source type (CV_8U) — it cannot output CV_32F (that throws).
+	cv::reduce(gray, rowM, 1, cv::REDUCE_MAX);   // H x 1  (per-row max, CV_8U)
+	cv::reduce(gray, colM, 0, cv::REDUCE_MAX);   // 1 x W  (per-col max, CV_8U)
+	const unsigned char* rp = rowM.ptr<unsigned char>(0);
+	const unsigned char* cp = colM.ptr<unsigned char>(0);
 
-	for (i=gray.cols-1; i>gray.cols*0.8;i--) {
-		if (cv::countNonZero(gray(cv::Rect(i,0,1,gray.rows))) > 0) {
-			break;
-		}
-	}
-	maxX = i;
+	const int T   = 40;             // a row/col is a black bar if its MAX < T (0..255)
+	const int   lim = 4;            // only look for bars in the outer 1/lim (25%)
+	int minY = 0, maxY = H - 1, minX = 0, maxX = W - 1;
+	while (minY < H / lim       && rp[minY] < T) minY++;
+	while (maxY > H - 1 - H / lim && rp[maxY] < T) maxY--;
+	while (minX < W / lim       && cp[minX] < T) minX++;
+	while (maxX > W - 1 - W / lim && cp[maxX] < T) maxX--;
 
-	for (i=0; i<gray.rows*0.2;i++) {
-		if (cv::countNonZero(gray(cv::Rect(0,i,gray.cols,1))) > 0) {
-			break;
-		}
+	// Each of the 4 sides is handled independently: ignore an inset smaller than
+	// MINBAR (single dark edge row / sensor noise), otherwise crop that side.
+	const int MINBAR = 8;
+	if (minY < MINBAR)         minY = 0;
+	if (H - 1 - maxY < MINBAR) maxY = H - 1;
+	if (minX < MINBAR)         minX = 0;
+	if (W - 1 - maxX < MINBAR) maxX = W - 1;
+	bool anyBar = (minX > 0) || (maxX < W - 1) || (minY > 0) || (maxY < H - 1);
+	// Don't crop if nothing meaningful, or if it would leave too little content.
+	if (!anyBar || (maxX - minX) < W / 2 || (maxY - minY) < H / 2) {
+		_cropRect = cv::Rect(0, 0, W, H);
+		_hasLetterbox = false;
+		return;
 	}
-	minY = i;
-
-	for (i=gray.rows-1; i>gray.rows*0.8;i--) {
-		if (cv::countNonZero(gray(cv::Rect(0,i,gray.cols,1))) > 0) {
-			break;
-		}
-	}
-	maxY = i;
-	
-	if (maxX-16 < minX || maxY-16 < minY) { // Reset
-		minX = 0;
-		minY = 0;
-		maxX = frame.cols-1;
-		maxY = frame.rows-1;
-	}
-	
-	
-	// fprintf(stderr, "cropBorder(%dx%d -> %d,%d %dx%d)\n", frame.cols, frame.rows, minX, minY, maxX-minX+1,maxY-minY+1);
-	_cropRect = cv::Rect(minX,minY, maxX-minX+1, maxY-minY+1);
+	_cropRect = cv::Rect(minX, minY, maxX - minX + 1, maxY - minY + 1);
+	_hasLetterbox = true;
 }
 
 
 cv::Mat AmbiPi::cropBorders(cv::Mat frame, bool debug) const
 {
 	std::lock_guard<std::recursive_mutex> lock(_mutex);
+	// No letterbox detected -> nothing to do; skip the per-frame resizes entirely.
+	if (!_hasLetterbox) return frame;
 	// Safety: if the cached crop rect doesn't fully fit the current frame (e.g.
 	// just after a capture-resolution change, before updateCropRect re-ran),
 	// skip cropping this frame instead of indexing out of bounds.
 	if (frame.empty() || (_cropRect & cv::Rect(0, 0, frame.cols, frame.rows)) != _cropRect)
 		return frame;
-	cv::Mat cropped = frame(_cropRect);
-	cv::Mat out;
-	
-	// debug = false;
-	if (!debug) {
-		cv::Mat scaled;
-		out = cv::Mat(frame.rows, frame.cols, CV_8UC3, cv::Scalar(0,0,0));
-		cv::resize(cropped, scaled, cv::Size(_cropRect.width, frame.rows), 0, 0, cv::INTER_NEAREST);
-		scaled.copyTo(out(cv::Rect(_cropRect.x, 0, _cropRect.width, frame.rows)));
-
-		cv::resize(cropped, scaled, cv::Size(frame.cols, _cropRect.height), 0, 0, cv::INTER_NEAREST);
-		scaled.copyTo(out(cv::Rect(0, _cropRect.y, frame.cols, _cropRect.height)));
-
-		// cv::resize(cropped, out, cv::Size(frame.cols, frame.rows), 0, 0, cv::INTER_NEAREST);
-		cropped.copyTo(out(_cropRect));
-	} else {
-		out = cv::Mat(frame.rows, frame.cols, CV_8UC3, cv::Scalar(64,0,0));
-		cropped.copyTo(out(_cropRect));
-		// cv::cvtColor(gray, out, cv::COLOR_GRAY2BGR);
-		cv::rectangle(out, _cropRect, cv::Scalar(0,0,255));
+	if (debug) {                                  // AmbiLight2 screenshot: just outline the rect
+		cv::Mat out = frame.clone();
+		cv::rectangle(out, _cropRect, cv::Scalar(0, 0, 255));
+		return out;
 	}
+	// Crop to the detected content rect and stretch it back to the full frame —
+	// one resize, no duplication. Handles 1–4 black sides uniformly. (The old
+	// code stretched content *into* the bar regions, which doubled edge content
+	// — e.g. a second, stretched subtitle in the bottom bar — and only worked
+	// for a symmetric letterbox/pillarbox.)
+	cv::Mat out;
+	cv::resize(frame(_cropRect), out, frame.size(), 0, 0, cv::INTER_LINEAR);
 	return out;
 }
 
@@ -1442,11 +1436,33 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
     colorsLeftNew.create( left, 1,  CV_8UC3);
     colorsRightNew.create(right, 1, CV_8UC3);
 
-    // Downsample edge regions into 1D strips (INTER_AREA is fast and good for downscaling)
-    cv::resize(frame(cv::Rect(0,            0,          frame.cols, dh)), colorsTopNew,    cv::Size(top,  1), 0, 0, cv::INTER_AREA);
-    cv::resize(frame(cv::Rect(0,  frame.rows - dh,      frame.cols, dh)), colorsBottomNew, cv::Size(bot,  1), 0, 0, cv::INTER_AREA);
-    cv::resize(frame(cv::Rect(0,            0,          dw, frame.rows)), colorsLeftNew,  cv::Size(1, left),  0, 0, cv::INTER_AREA);
-    cv::resize(frame(cv::Rect(frame.cols - dw, 0,       dw, frame.rows)), colorsRightNew, cv::Size(1, right), 0, 0, cv::INTER_AREA);
+    // Confine sampling to the content rect. LED segments that fall over the black
+    // bars stay black: e.g. for a top/bottom letterbox the left/right LEDs at bar
+    // height are black, while top/bottom span the full content width. No stretching.
+    cv::Rect R(0, 0, frame.cols, frame.rows);
+    if (_enableCropping && _hasLetterbox) {
+        cv::Rect c = _cropRect & cv::Rect(0, 0, frame.cols, frame.rows);
+        if (c.width >= 8 && c.height >= 8) R = c;
+    }
+    const int bh = std::min(dh, R.height);   // edge band thickness, clamped to content
+    const int bw = std::min(dw, R.width);
+
+    // Build a 1-D edge strip: sample the content edge `band` into the sub-range of
+    // the strip the content covers along that axis; the rest stays black.
+    auto buildH = [&](cv::Mat& strip, int N, const cv::Rect& band) {
+        strip.setTo(cv::Scalar(0, 0, 0));
+        int i0 = R.x * N / frame.cols, i1 = (R.x + R.width) * N / frame.cols, n = i1 - i0;
+        if (n >= 1) { cv::Mat seg; cv::resize(frame(band), seg, cv::Size(n, 1), 0, 0, cv::INTER_AREA); seg.copyTo(strip(cv::Rect(i0, 0, n, 1))); }
+    };
+    auto buildV = [&](cv::Mat& strip, int N, const cv::Rect& band) {
+        strip.setTo(cv::Scalar(0, 0, 0));
+        int i0 = R.y * N / frame.rows, i1 = (R.y + R.height) * N / frame.rows, n = i1 - i0;
+        if (n >= 1) { cv::Mat seg; cv::resize(frame(band), seg, cv::Size(1, n), 0, 0, cv::INTER_AREA); seg.copyTo(strip(cv::Rect(0, i0, 1, n))); }
+    };
+    buildH(colorsTopNew,    top,   cv::Rect(R.x, R.y,                 R.width, bh));
+    buildH(colorsBottomNew, bot,   cv::Rect(R.x, R.y + R.height - bh, R.width, bh));
+    buildV(colorsLeftNew,   left,  cv::Rect(R.x,                R.y, bw, R.height));
+    buildV(colorsRightNew,  right, cv::Rect(R.x + R.width - bw, R.y, bw, R.height));
 
     // HDR->SDR compensation, applied only to the tiny downsampled strips (cheap).
     if (_hdrComp) {

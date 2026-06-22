@@ -118,6 +118,15 @@ document.addEventListener("visibilitychange", () => {
 });
 imgEl.addEventListener("click", () => updateImage(true));
 
+// Show the build version after the "AmbiPi" heading (e.g. "v1.0.34")
+fetch("/api/version")
+  .then((r) => r.text())
+  .then((t) => {
+    const el = document.getElementById("version");
+    if (el && t.trim()) el.textContent = "v" + t.trim();
+  })
+  .catch(() => {});
+
 // Initialize brightness from backend
 fetch("/api/bri")
   .then(r => r.text())

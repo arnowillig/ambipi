@@ -137,8 +137,9 @@ int main(int argc, char *argv[])
 #else
 			frame = fb.grabFrame(12);
 #endif
-			ambiPi.updateCropRect(frame);
-			frame = ambiPi.cropBorders(frame, false);
+			// No stretching: calculateAmbilightFromFrame confines sampling to the
+			// crop rect and blacks out the bar segments (same model as AmbiLight).
+			if (ambiPi.croppingEnabled()) ambiPi.updateCropRect(frame);
 			sleep = 25;
 			// sleep = 50;
 			if (screenshot) {
@@ -215,18 +216,16 @@ int main(int argc, char *argv[])
 					capture = nullptr;
 					sleep = 100;
 				} else {
-					// Letterbox/black-bar crop (toggle /api/crop, default off): recompute
-					// the content rect ~1x/s (Canny is costly), then stretch content to fill
-					// every frame. Done before setLastFrame so the preview mirrors the LEDs.
+					lastGoodFrame = time(NULL);
+					// Preview = uncropped frame (getDebugFrame overlays the green crop rect).
+					ambiPi.setLastFrame(frame);
+					// Letterbox/black-bar crop (toggle /api/crop, default off): recompute the
+					// content rect ~1×/s (cheap reduce). No stretching — calculateAmbilightFromFrame
+					// confines edge sampling to the rect and blacks out the LED segments over the bars.
 					if (ambiPi.croppingEnabled()) {
 						time_t nowc = time(NULL);
 						if (nowc != lastCrop) { ambiPi.updateCropRect(frame); lastCrop = nowc; }
-						frame = ambiPi.cropBorders(frame, false);
 					}
-					// HDR->SDR compensation now happens inside calculateAmbilightFromFrame,
-					// on the small downsampled edge strips (cheap) — not on the full frame.
-					lastGoodFrame = time(NULL);
-					ambiPi.setLastFrame(frame);
 					ambiPi.calculateAmbilightFromFrame(frame);
 					if (ambiPi.getEnableDisplayVideo()) {
 						ambiPi.calculateDisplayFrameFromFrame(frame);

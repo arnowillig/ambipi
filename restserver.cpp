@@ -9,6 +9,10 @@
 #include <unistd.h>
 // #include <nlohmann/json.hpp>
 
+#ifndef AMBIPI_VERSION
+#define AMBIPI_VERSION "dev"   // overridden at build time via -DAMBIPI_VERSION (Makefile)
+#endif
+
 
 RESTServer::RESTServer(AmbiPi* ambiPi) : _ambiPi(ambiPi)
 {
@@ -77,6 +81,7 @@ RESTServer::RESTServer(AmbiPi* ambiPi) : _ambiPi(ambiPi)
 	Rest::Routes::Get(_router, "/api/col/:r/:g/:b",		Rest::Routes::bind(&RESTServer::setColor, this));
 	Rest::Routes::Get(_router, "/api/leds",			Rest::Routes::bind(&RESTServer::getLEDs, this));
 	Rest::Routes::Get(_router, "/api/screenshot.jpg",	Rest::Routes::bind(&RESTServer::getScreenshot, this));
+	Rest::Routes::Get(_router, "/api/version",		Rest::Routes::bind(&RESTServer::getVersion, this));
 
 	Rest::Routes::Get(_router, "/index.html",		Rest::Routes::bind(&RESTServer::getStaticHTML, this));
 	Rest::Routes::Get(_router, "/",				Rest::Routes::bind(&RESTServer::getStaticHTML, this));
@@ -175,6 +180,13 @@ void RESTServer::getStaticHTML(const Rest::Request& request, Http::ResponseWrite
 	}
 	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Not_Found);
+}
+
+void RESTServer::getVersion(const Rest::Request& request, Http::ResponseWriter response)
+{
+	(void) request;
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, std::string(AMBIPI_VERSION) + "\n");
 }
 
 void RESTServer::getScreenshot(const Rest::Request& request, Http::ResponseWriter response)

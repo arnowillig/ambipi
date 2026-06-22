@@ -128,6 +128,7 @@ private:
 	mutable std::recursive_mutex _mutex;
 	cv::Mat _lastFrame;
 	bool _enableCropping;
+	bool _hasLetterbox;        // set by updateCropRect; gates the per-frame cropBorders
 	bool _enableDisplayVideo;
 	bool _enableGameWallAmbilight;
 	bool _enableGamingTable;

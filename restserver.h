@@ -41,6 +41,7 @@ public:
 	void getMode(const Rest::Request &request, Http::ResponseWriter response);
 	void getLEDs(const Rest::Request &request, Http::ResponseWriter response);
 	void getScreenshot(const Rest::Request& request, Http::ResponseWriter response);
+	void getVersion(const Rest::Request& request, Http::ResponseWriter response);
 	void getStaticHTML(const Rest::Request& request, Http::ResponseWriter response);
 	void setDisplay(const Rest::Request &request, Http::ResponseWriter response);
 	void setGamingTable(const Rest::Request &request, Http::ResponseWriter response);
