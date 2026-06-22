@@ -69,7 +69,12 @@ int main(int argc, char *argv[])
 	signal(SIGUSR1, signalHandler);
 	
 	fprintf(stderr, "AmbiPi\n");
-	
+
+	// The per-frame OpenCV ops (YUYV->BGR retrieve, the small edge resizes) are
+	// tiny; splitting each across OpenCV's thread pool costs more in sync overhead
+	// than it saves. Run them single-threaded to cut total CPU.
+	cv::setNumThreads(1);
+
 	FrameBuffer fb("/dev/fb0");
 	
 	AmbiPi ambiPi;
