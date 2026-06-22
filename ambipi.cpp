@@ -1489,10 +1489,13 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
     const cv::Vec3b* pR = _colorsR.ptr<cv::Vec3b>();
     const cv::Vec3b* pT = _colorsT.ptr<cv::Vec3b>();
 
-    // --- Left interior (shift down by one; corner handled separately) ---
-    for (int i = 1; i < LEDS_LEFT; ++i) {
-        const cv::Vec3b& c = pL[i - 1]; // pL has length `left`, maps to LED indices 1..LEDS_LEFT-1
-        setColorLeft(i - 1, c[r], c[g], c[b]);
+    // --- Left interior (exclude corners): idx 1..left from pL[0..left-1], matching
+    //     the other sides. (The old code wrote idx 0..32 from a 32-wide strip — an
+    //     off-by-one + out-of-bounds read that shifted the left strip up by 1 LED,
+    //     which showed up as content bleeding into the top bar once cropping was on.)
+    for (int i = 0; i < left; ++i) {
+        const cv::Vec3b& c = pL[i];
+        setColorLeft(i + 1, c[r], c[g], c[b]);
     }
 
     // --- Bottom interior (exclude corners) ---
@@ -1513,11 +1516,18 @@ void AmbiPi::calculateAmbilightFromFrame(cv::Mat frame, bool bgr)
         setColorTop(i + 1, c[r], c[g], c[b]);
     }
 
-    // --- Corners: average of adjacent strip ends ---
-    const cv::Vec3b TL = pT[0]; // (pT[0]       + pL[0])        * 0.5;
-    const cv::Vec3b TR = pT[top-1]; // (pT[top-1]   + pR[0])        * 0.5;
-    const cv::Vec3b BL = pB[0]; // (pB[0]       + pL[left-3])   * 0.5;
-    const cv::Vec3b BR = pB[bot-1]; // (pB[bot-1]   + pR[right-1])  * 0.5;
+    // --- Corners: from the adjacent top/bottom strip ends, but BLACK when the
+    //     corner lies in a bar (outside the crop rect), so letterbox/pillarbox
+    //     corners aren't lit. ---
+    auto corner = [&](const cv::Vec3b& c, bool leftEdge, bool topEdge) -> cv::Vec3b {
+        bool xIn = leftEdge ? (R.x <= 0) : (R.x + R.width  >= frame.cols);
+        bool yIn = topEdge  ? (R.y <= 0) : (R.y + R.height >= frame.rows);
+        return (xIn && yIn) ? c : cv::Vec3b(0, 0, 0);
+    };
+    const cv::Vec3b TL = corner(pT[0],     true,  true);
+    const cv::Vec3b TR = corner(pT[top-1], false, true);
+    const cv::Vec3b BL = corner(pB[0],     true,  false);
+    const cv::Vec3b BR = corner(pB[bot-1], false, false);
 
     setColorTop(0,              TL[r], TL[g], TL[b]);
     setColorLeft(0,             TL[r], TL[g], TL[b]);
