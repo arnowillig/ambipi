@@ -36,6 +36,9 @@
 #include "esp_event.h"
 #include "esp_netif.h"
 #include "esp_http_server.h"
+#include "esp_ota_ops.h"
+#include "esp_app_format.h"
+#include "esp_system.h"
 
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
@@ -48,6 +51,9 @@
 void ble_store_config_init(void);
 
 #define TAG       "jmgo"
+#ifndef FW_VERSION           /* injected from CMake PROJECT_VER (top CMakeLists.txt) */
+#define FW_VERSION "dev"
+#endif
 #define BTN_GPIO  0          /* BOOT button on most ESP32 dev boards */
 #define DEV_NAME  "ESP32 Remote"
 
@@ -423,7 +429,13 @@ static void app_task(void *param)
 /* ---- high-level beamer control (used by HTTP + serial) ---- */
 static void beamer_on(void)
 {
-    if (conn_handle != BLE_HS_CONN_HANDLE_NONE) { applog("ON: already connected/awake"); return; }
+    if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
+        /* Already connected = networked standby (BT up, display may be off) or
+         * fully on. We can't read the display state, so send Power to wake it. */
+        applog("ON: connected -> sending Power to wake display");
+        send_power();
+        return;
+    }
     applog("ON: sending wake signal");
     want_wake = true;
     wake_ms = esp_log_timestamp();
@@ -478,9 +490,10 @@ static const char INDEX_HTML[] =
 ".on{background:#2e7d32;color:#fff}.off{background:#555;color:#fff}"
 "#log{margin-top:1em;background:#000;color:#3f6;font:12px/1.4 monospace;padding:.6em;border-radius:10px;height:320px;overflow:auto;white-space:pre-wrap}"
 "</style></head><body>"
-"<h1>JMGO Beamer (BT)</h1>"
+"<h1>JMGO Beamer (BT) <small style='opacity:.55;font-size:.6em'>v" FW_VERSION "</small></h1>"
 "<button class=on onclick=\"go('/api/beamer/on')\">Ein</button>"
 "<button class=off onclick=\"go('/api/beamer/off')\">Aus</button>"
+"<p style='opacity:.45;font-size:.8em'>Firmware-Update per <code>make push</code> (OTA)</p>"
 "<div id=log>...</div>"
 "<script>"
 "function go(u){fetch(u).then(r=>r.text()).then(_=>setTimeout(load,400));}"
@@ -504,24 +517,73 @@ static esp_err_t h_log(httpd_req_t *r)
     return e;
 }
 
+/* ---- OTA firmware upload: POST /api/ota/upload (raw .bin body) ---- */
+static void reboot_task(void *arg)
+{
+    (void) arg;
+    vTaskDelay(pdMS_TO_TICKS(1200));   /* let the HTTP response flush */
+    esp_restart();
+}
+
+static esp_err_t h_ota(httpd_req_t *r)
+{
+    int total = r->content_len;
+    applog("OTA: upload started (%d bytes)", total);
+
+    const esp_partition_t *part = esp_ota_get_next_update_partition(NULL);
+    if (!part) { applog("OTA: no update partition"); httpd_resp_send_err(r, HTTPD_500_INTERNAL_SERVER_ERROR, "no ota partition"); return ESP_FAIL; }
+
+    esp_ota_handle_t oh = 0;
+    esp_err_t err = esp_ota_begin(part, OTA_SIZE_UNKNOWN, &oh);
+    if (err != ESP_OK) { applog("OTA: begin failed: %s", esp_err_to_name(err)); httpd_resp_send_err(r, HTTPD_500_INTERNAL_SERVER_ERROR, "ota begin failed"); return ESP_FAIL; }
+
+    char buf[1024];
+    int remaining = total, received = 0, last_decile = -1;
+    while (remaining > 0) {
+        int n = httpd_req_recv(r, buf, remaining < (int)sizeof buf ? remaining : (int)sizeof buf);
+        if (n == HTTPD_SOCK_ERR_TIMEOUT) continue;
+        if (n <= 0) { esp_ota_abort(oh); applog("OTA: recv failed (%d)", n); httpd_resp_send_err(r, HTTPD_500_INTERNAL_SERVER_ERROR, "recv failed"); return ESP_FAIL; }
+        err = esp_ota_write(oh, buf, n);
+        if (err != ESP_OK) { esp_ota_abort(oh); applog("OTA: write failed: %s", esp_err_to_name(err)); httpd_resp_send_err(r, HTTPD_500_INTERNAL_SERVER_ERROR, "ota write failed"); return ESP_FAIL; }
+        received += n; remaining -= n;
+        int dec = total ? (received * 10 / total) : 0;
+        if (dec != last_decile) { last_decile = dec; applog("OTA: %d%% (%d/%d)", dec * 10, received, total); }
+    }
+
+    err = esp_ota_end(oh);
+    if (err != ESP_OK) { applog("OTA: end/validate failed: %s", esp_err_to_name(err)); httpd_resp_send_err(r, HTTPD_500_INTERNAL_SERVER_ERROR, "image invalid"); return ESP_FAIL; }
+    err = esp_ota_set_boot_partition(part);
+    if (err != ESP_OK) { applog("OTA: set_boot failed: %s", esp_err_to_name(err)); httpd_resp_send_err(r, HTTPD_500_INTERNAL_SERVER_ERROR, "set boot failed"); return ESP_FAIL; }
+
+    applog("OTA: done -> boot '%s', rebooting in ~1s", part->label);
+    httpd_resp_set_type(r, "text/plain");
+    httpd_resp_sendstr(r, "ok, rebooting\n");
+    xTaskCreate(reboot_task, "reboot", 2048, NULL, 5, NULL);
+    return ESP_OK;
+}
+
 static void http_start(void)
 {
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
     cfg.server_port = 80;
     cfg.lru_purge_enable = true;
+    cfg.recv_wait_timeout = 10;        /* generous for OTA upload */
+    cfg.send_wait_timeout = 10;
     httpd_handle_t s = NULL;
     if (httpd_start(&s, &cfg) != ESP_OK) { applog("http: start FAILED"); return; }
     httpd_uri_t u;
-    u = (httpd_uri_t){ .uri = "/",                .method = HTTP_GET, .handler = h_root }; httpd_register_uri_handler(s, &u);
-    u = (httpd_uri_t){ .uri = "/api/beamer/on",   .method = HTTP_GET, .handler = h_on   }; httpd_register_uri_handler(s, &u);
-    u = (httpd_uri_t){ .uri = "/api/beamer/off",  .method = HTTP_GET, .handler = h_off  }; httpd_register_uri_handler(s, &u);
-    u = (httpd_uri_t){ .uri = "/log",             .method = HTTP_GET, .handler = h_log  }; httpd_register_uri_handler(s, &u);
-    applog("http: server on :80  (/, /api/beamer/on, /api/beamer/off, /log)");
+    u = (httpd_uri_t){ .uri = "/",                .method = HTTP_GET,  .handler = h_root }; httpd_register_uri_handler(s, &u);
+    u = (httpd_uri_t){ .uri = "/api/beamer/on",   .method = HTTP_GET,  .handler = h_on   }; httpd_register_uri_handler(s, &u);
+    u = (httpd_uri_t){ .uri = "/api/beamer/off",  .method = HTTP_GET,  .handler = h_off  }; httpd_register_uri_handler(s, &u);
+    u = (httpd_uri_t){ .uri = "/log",             .method = HTTP_GET,  .handler = h_log  }; httpd_register_uri_handler(s, &u);
+    u = (httpd_uri_t){ .uri = "/api/ota/upload",  .method = HTTP_POST, .handler = h_ota  }; httpd_register_uri_handler(s, &u);
+    applog("http: server on :80  (/, /api/beamer/on, /api/beamer/off, /log, /api/ota/upload)");
 }
 
 void app_main(void)
 {
     s_log_mtx = xSemaphoreCreateMutex();
+    applog("boot: JMGO beamer-remote v%s", FW_VERSION);
     esp_err_t rc = nvs_flash_init();
     if (rc == ESP_ERR_NVS_NO_FREE_PAGES || rc == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         nvs_flash_erase();

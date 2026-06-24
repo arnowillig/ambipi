@@ -34,8 +34,30 @@ the connection itself wakes it (no key needed). Turning **off** sends Consumer
 | `GET /api/beamer/on` | Wake from standby (broadcast the wake replica) |
 | `GET /api/beamer/off` | Power off (Consumer Power, when connected) |
 | `GET /log` | Recent log lines (plain text) |
+| `POST /api/ota/upload` | Firmware update: raw `.bin` body, writes + reboots (used by `make push`) |
 
 Example: `curl http://<esp32-ip>/api/beamer/on`
+
+## Build, flash & OTA update (`make`)
+
+| Command | What |
+|---------|------|
+| `make deploy` | build + flash over **USB** (`PORT` auto-detected, 115200 baud) |
+| `make push`   | build + **OTA** update over WiFi — `make push HOST=<ip>` |
+| `make monitor` / `make run` | serial monitor / flash+monitor |
+| `make version` | print `FW_VERSION` from `main/main.c` |
+
+**Update workflow:** bump `FW_VERSION` in `main/main.c`, then `make push HOST=192.168.178.175`.
+The device receives the image, writes it to the spare OTA partition, switches boot, and reboots
+(~1 s). The new version shows in the web header and the boot log.
+
+⚠️ **One-time:** switching to the dual-OTA partition layout requires a **single USB `make deploy`**
+(the partition table can't be changed via OTA). That erases flash → **re-pair the beamer once**.
+After that, every update is `make push` (no cable).
+
+⚠️ **No rollback:** a broken image needs a USB `make deploy` to recover. The boot partition is only
+switched after `esp_ota_end` validates the image, so an *interrupted* upload leaves the running
+firmware intact.
 
 ## First pairing (one time)
 
