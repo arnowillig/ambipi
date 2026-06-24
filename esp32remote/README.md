@@ -1,90 +1,123 @@
-# esp32-hid — BLE wake/control for the JMGO projector
+# esp32remote — BLE remote for the JMGO projector
 
-ESP-IDF (NimBLE) firmware that wakes the JMGO projector from **deep standby** over
-Bluetooth and turns it off — by replicating the original remote's wake signal.
-Exposes a tiny **WiFi HTTP API + web page** so ambipi (or anything) can trigger it.
+ESP-IDF (ESP32, NimBLE) firmware that acts as the JMGO projector's Bluetooth remote
+**and** exposes a WiFi HTTP API + web page, so ambipi / Home-Assistant / `curl` can
+drive it. It can even **wake the projector from deep standby** by replicating the
+original remote's BLE wake advertisement — see
+[../JMGO-BT-WAKE.md](../JMGO-BT-WAKE.md) for the reverse-engineering story.
 
-✅ **This works.** The beamer wakes from real deep standby and powers off. See
-[../ambipi/JMGO-BT-WAKE.md](../ambipi/JMGO-BT-WAKE.md) for the full reverse-engineering story.
+- **Web UI:** `http://<device-ip>/` — full remote (power, D-pad, Back/Home/Menu/Settings/Input, volume) + live status + log.
+- **OTA:** `make push` updates over WiFi (no cable).
+- **Version:** single source `PROJECT_VER` in [CMakeLists.txt](CMakeLists.txt) → shown in web header + boot log + `/api/status`.
 
-## How the wake works
+Current device: **`192.168.178.175`** (set a static DHCP lease).
 
-The beamer's standby BLE scanner listens for the original remote's advertisement:
-a **MediaTek manufacturer payload containing the beamer's own MAC** (`35 <addr> ffffffff`).
-This firmware broadcasts exactly that → the beamer connects out of deep standby →
-the connection itself wakes it (no key needed). Turning **off** sends Consumer
-"Power" (0x30) over HID while connected.
-
-## Setup
-
-1. **VS Code** + ESP-IDF extension, ESP-IDF **v6.x**. Board: ESP32-WROOM-32 (`set-target esp32`).
-2. **Fill in your WiFi** at the top of [main/main.c](main/main.c):
-   ```c
-   #define WIFI_SSID "CHANGE_ME"
-   #define WIFI_PASS "CHANGE_ME"
-   ```
-3. Build → Flash → Monitor (115200). The monitor prints the assigned IP:
-   `wifi: got IP 192.168.x.y`.
+---
 
 ## HTTP API
 
+All endpoints are **GET** except the OTA upload. Responses are plain text `ok\n`
+unless noted. CORS-free, no auth — intended for the local LAN.
+
+### Control — `GET /api/beamer/<key>`
+
+| `<key>` | Action | HID sent | Works when |
+|---------|--------|----------|------------|
+| `on` | Wake / power on | wake advertisement, else Consumer Power | always (incl. deep standby) |
+| `off` | Power off | Consumer Power `0x0030` | connected |
+| `power` | Power toggle | Consumer Power `0x0030` | connected |
+| `up` `down` `left` `right` | D-pad | Keyboard arrows | connected |
+| `ok` | Select / center | Keyboard Enter `0x28` | connected |
+| `back` | Back | Consumer AC Back `0x0224` | connected |
+| `home` | Home | Consumer AC Home `0x0223` | connected |
+| `menu` | Menu | Consumer Menu `0x0040` | connected |
+| `settings` | Settings (best-effort) | Consumer AL Control Panel `0x0183` | connected |
+| `input` | Input / HDMI (best-guess) | Consumer Media Select TV `0x0089` | connected |
+| `volup` `voldown` `mute` | Volume | Consumer `0x00E9` / `0x00EA` / `0x00E2` | connected |
+
+Tuning (find unknown codes live, no reflash needed):
+
 | Endpoint | Action |
 |----------|--------|
-| `GET /` | Mini web page: **Ein** / **Aus** buttons + live log |
-| `GET /api/beamer/on` | Wake from standby (broadcast the wake replica) |
-| `GET /api/beamer/off` | Power off (Consumer Power, when connected) |
-| `GET /log` | Recent log lines (plain text) |
-| `POST /api/ota/upload` | Firmware update: raw `.bin` body, writes + reboots (used by `make push`) |
+| `GET /api/beamer/cc?u=<hex>` | send an arbitrary **Consumer** usage (e.g. `?u=223` = Home) |
+| `GET /api/beamer/key?k=<hex>` | send an arbitrary **Keyboard** usage (e.g. `?k=28` = Enter) |
 
-Example: `curl http://<esp32-ip>/api/beamer/on`
+### Status / system
 
-## Build, flash & OTA update (`make`)
+| Endpoint | Returns |
+|----------|---------|
+| `GET /` | Web UI (HTML) |
+| `GET /api/status` | JSON `{"connected":true,"version":"1.1.3"}` |
+| `GET /log` | recent device log lines (plain text) |
+| `POST /api/ota/upload` | firmware update — raw `.bin` body, writes + reboots (used by `make push`) |
+
+Examples:
+```sh
+curl http://192.168.178.175/api/beamer/on
+curl http://192.168.178.175/api/beamer/home
+curl http://192.168.178.175/api/status
+curl 'http://192.168.178.175/api/beamer/cc?u=223'   # send Home via the tuning endpoint
+```
+
+**Connected vs disconnected:** everything except `on` needs the projector connected
+(on, or in networked standby). `on` works from real deep standby (BLE wake). Check
+`/api/status` or the web badge (● Connected / ○ Disconnected).
+
+---
+
+## Build / flash / update (`make`)
 
 | Command | What |
 |---------|------|
-| `make deploy` | build + flash over **USB** (`PORT` auto-detected, 115200 baud) |
-| `make push`   | build + **OTA** update over WiFi — `make push HOST=<ip>` |
+| `make deploy` | build + flash over **USB** (one-time, or recovery) — `PORT` auto-detected, 115200 baud |
+| `make push` | build + **OTA** update over WiFi — `make push HOST=<ip>` (default `192.168.178.175`) |
 | `make monitor` / `make run` | serial monitor / flash+monitor |
-| `make version` | print `FW_VERSION` from `main/main.c` |
+| `make clean` / `make erase` | fullclean / erase whole flash |
+| `make version` | print `PROJECT_VER` |
 
-**Update workflow:** bump `FW_VERSION` in `main/main.c`, then `make push HOST=192.168.178.175`.
-The device receives the image, writes it to the spare OTA partition, switches boot, and reboots
-(~1 s). The new version shows in the web header and the boot log.
+**Update workflow:** bump `PROJECT_VER` in [CMakeLists.txt](CMakeLists.txt) → `make push`.
+The device writes the image to the spare OTA partition, switches boot, reboots (~1 s);
+the new version shows in the web header / `/api/status` / boot log.
 
-⚠️ **One-time:** switching to the dual-OTA partition layout requires a **single USB `make deploy`**
-(the partition table can't be changed via OTA). That erases flash → **re-pair the beamer once**.
-After that, every update is `make push` (no cable).
+The Makefile bakes in the workaround for the broken system ESP-IDF env (system python
+upgraded): it sets `IDF_PYTHON_ENV_PATH` + `IDF_PYTHON_CHECK_CONSTRAINTS=no` and sources
+`export.sh` itself — nothing to set up by hand.
 
-⚠️ **No rollback:** a broken image needs a USB `make deploy` to recover. The boot partition is only
-switched after `esp_ota_end` validates the image, so an *interrupted* upload leaves the running
-firmware intact.
+⚠️ **First time / partition change:** the dual-OTA partition layout (and any change to
+`partitions.csv`) can only be applied via **USB `make deploy`**, not OTA. That erases
+flash → **re-pair the projector once**.
+
+⚠️ **HID descriptor changes** (adding/removing keys, i.e. editing the report map in
+`main/main.c`) require the projector to **re-read the descriptor** → remove the
+"ESP32 Remote" pairing on the projector and pair again, or the new keys won't register.
+Pure additions like new HTTP endpoints / web buttons / status do **not** need re-pairing.
+
+⚠️ **No rollback:** a broken image needs a USB `make deploy`. The boot partition is only
+switched after `esp_ota_end` validates the image, so an interrupted upload is safe.
+
+---
 
 ## First pairing (one time)
 
-On the JMGO: **Einstellungen → Zubehör koppeln → "JMGO BT Remote"**, confirm the
-code on the beamer (our side auto-accepts the numeric comparison). It then shows
-the same icon as the real remote (appearance = Remote Control). The bond persists
-in NVS across reboots.
+Projector → **Einstellungen → Zubehör koppeln → "ESP32 Remote"**, confirm the numeric
+code on the projector (the firmware auto-accepts). It then appears with the same icon
+as the original remote (appearance = Remote Control). The bond persists in NVS.
 
-## Triggers
+## Configuration (top of [main/main.c](main/main.c))
 
-- **HTTP** (above) — the intended path for automation.
-- **Serial monitor:** press any key (e.g. `p`) — toggles wake/off.
-- **GPIO0:** BOOT button, or briefly bridge `IO0`↔`GND` (the D1-Mini has no BOOT button).
+- `WIFI_SSID` / `WIFI_PASS` — your WiFi (⚠️ plain text in source; reset before committing).
+- `TV_ADDR` + `WAKE_MFG` — the projector's BLE address (reversed byte order) used for the
+  wake advertisement. Change both if your projector differs.
+- Firmware version → `PROJECT_VER` in `CMakeLists.txt`.
 
-## Wiring into ambipi
+## Triggers (besides HTTP)
 
-Run the ESP32 on a USB power supply near the beamer. Then point ambipi's
-`/api/beamer/on` at it:
-```
-curl -s http://<esp32-ip>/api/beamer/on
-```
-Off can use either the ESP32 (`/api/beamer/off`) or ambipi's existing network
-ATV-remote `/api/beamer/off` (works while the beamer is on / reachable).
+- **Serial monitor:** type a key (any) — toggles wake/off.
+- **GPIO0:** BOOT button, or briefly bridge `IO0`↔`GND`.
 
 ## Notes / tuning
 
-- Wake = the connection. Do **not** send Power after waking (Power is a toggle and
-  would switch it back off).
-- Beamer address is `TV_ADDR` + `WAKE_MFG` in `main.c` (both reversed byte order).
-- WiFi password stays in your local source — not committed anywhere by this project.
+- `settings` and `input` use **best-guess** HID usages and may not work (vendor-specific
+  on the JMGO). Use `/api/beamer/cc?u=<hex>` to probe other codes live; if nothing fits,
+  sniff the original remote (pair it to the Pi as a HID host and log its reports).
+- `back` = Consumer AC Back; if it doesn't register, try Keyboard Escape via `key?k=29`.

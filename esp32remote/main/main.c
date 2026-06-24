@@ -22,6 +22,7 @@
  * Set your beamer's address in TV_ADDR below (byte order is REVERSED here).
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
 #include "freertos/FreeRTOS.h"
@@ -66,7 +67,8 @@ static const ble_addr_t TV_ADDR = {
 
 static uint8_t  own_addr_type;
 static uint16_t conn_handle      = BLE_HS_CONN_HANDLE_NONE;
-static uint16_t report_val_handle;
+static uint16_t report_val_handle;       /* consumer-control report (ID 1) */
+static uint16_t report_val_handle_kbd;   /* keyboard report (ID 2)         */
 static volatile bool secured     = false;
 static volatile bool want_wake   = false;
 static uint32_t wake_ms          = 0;
@@ -119,39 +121,53 @@ static void applog(const char *fmt, ...)
 
 static void advertise(bool directed);
 
-/* ---- HID report map: Consumer Control, Report ID 1, 1 byte / 8 bits ----
- * bit0 Power, bit1 Menu, bit2 Vol+, bit3 Vol-, bit4 Mute, bit5 Play/Pause,
- * bit6 Next, bit7 Prev.                                                     */
+/* ---- HID report map ----
+ * Report ID 1: Consumer Control — one 16-bit Usage code (0 = release).
+ *   Power 0x0030, Menu 0x0040, Vol+ 0x00E9, Vol- 0x00EA, Mute 0x00E2,
+ *   Home (AC Home) 0x0223, Back (AC Back) 0x0224, Settings (AL CtrlPanel) 0x0183.
+ * Report ID 2: Keyboard — for D-pad (arrows) + OK (Enter). 8-byte report. */
 static const uint8_t hid_report_map[] = {
-    0x05, 0x0C,       /* Usage Page (Consumer)            */
-    0x09, 0x01,       /* Usage (Consumer Control)         */
-    0xA1, 0x01,       /* Collection (Application)         */
-    0x85, 0x01,       /*   Report ID (1)                  */
-    0x15, 0x00,       /*   Logical Min (0)                */
-    0x25, 0x01,       /*   Logical Max (1)                */
-    0x75, 0x01,       /*   Report Size (1)                */
-    0x95, 0x08,       /*   Report Count (8)               */
-    0x09, 0x30,       /*   Usage (Power)                  */
-    0x09, 0x40,       /*   Usage (Menu)                   */
-    0x09, 0xE9,       /*   Usage (Volume Increment)       */
-    0x09, 0xEA,       /*   Usage (Volume Decrement)       */
-    0x09, 0xE2,       /*   Usage (Mute)                   */
-    0x09, 0xCD,       /*   Usage (Play/Pause)             */
-    0x09, 0xB5,       /*   Usage (Scan Next)              */
-    0x09, 0xB6,       /*   Usage (Scan Previous)          */
-    0x81, 0x02,       /*   Input (Data,Var,Abs)           */
-    0xC0              /* End Collection                   */
+    /* --- Report ID 1: Consumer Control --- */
+    0x05, 0x0C,             /* Usage Page (Consumer)              */
+    0x09, 0x01,             /* Usage (Consumer Control)           */
+    0xA1, 0x01,             /* Collection (Application)           */
+    0x85, 0x01,             /*   Report ID (1)                    */
+    0x15, 0x00,             /*   Logical Minimum (0)              */
+    0x26, 0xFF, 0x03,       /*   Logical Maximum (0x03FF)         */
+    0x19, 0x00,             /*   Usage Minimum (0)               */
+    0x2A, 0xFF, 0x03,       /*   Usage Maximum (0x03FF)          */
+    0x75, 0x10,             /*   Report Size (16)                 */
+    0x95, 0x01,             /*   Report Count (1)                 */
+    0x81, 0x00,             /*   Input (Data, Array)              */
+    0xC0,                   /* End Collection                     */
+    /* --- Report ID 2: Keyboard --- */
+    0x05, 0x01,             /* Usage Page (Generic Desktop)       */
+    0x09, 0x06,             /* Usage (Keyboard)                   */
+    0xA1, 0x01,             /* Collection (Application)           */
+    0x85, 0x02,             /*   Report ID (2)                    */
+    0x05, 0x07,             /*   Usage Page (Keyboard)            */
+    0x19, 0xE0, 0x29, 0xE7, /*   Usage Min/Max (modifiers)        */
+    0x15, 0x00, 0x25, 0x01, 0x75, 0x01, 0x95, 0x08, 0x81, 0x02,  /* 8 modifier bits */
+    0x95, 0x01, 0x75, 0x08, 0x81, 0x01,                          /* reserved byte   */
+    0x95, 0x06, 0x75, 0x08, /*   Report Count 6, Size 8           */
+    0x15, 0x00, 0x25, 0xFF, /*   Logical 0..255                   */
+    0x05, 0x07, 0x19, 0x00, 0x29, 0xFF,                          /* Usage 0..255    */
+    0x81, 0x00,             /*   Input (Data, Array) — 6 keys     */
+    0xC0                    /* End Collection                     */
 };
 
 static const uint8_t hid_info[]   = { 0x11, 0x01, 0x00, 0x02 }; /* bcdHID 1.11, country 0, flags: RemoteWake */
 static const uint8_t pnp_id[]     = { 0x02, 0x6B, 0x1D, 0x46, 0x02, 0x01, 0x00 }; /* USB, VID 1D6B, PID 0246, v1 */
-static const uint8_t report_ref[] = { 0x01, 0x01 };            /* Report ID 1, Input */
+static const uint8_t report_ref_cc[]  = { 0x01, 0x01 };        /* Report ID 1 (consumer), Input */
+static const uint8_t report_ref_kbd[] = { 0x02, 0x01 };        /* Report ID 2 (keyboard), Input */
 static uint8_t protocol_mode      = 0x01;                      /* Report Protocol */
 
 struct ro_val { const uint8_t *p; uint16_t len; };
 static const struct ro_val rv_report_map = { hid_report_map, sizeof(hid_report_map) };
 static const struct ro_val rv_hid_info   = { hid_info,       sizeof(hid_info)       };
 static const struct ro_val rv_pnp        = { pnp_id,         sizeof(pnp_id)         };
+static const struct ro_val rv_ref_cc     = { report_ref_cc,  sizeof(report_ref_cc)  };
+static const struct ro_val rv_ref_kbd    = { report_ref_kbd, sizeof(report_ref_kbd) };
 
 /* ---- GATT access callbacks ---- */
 static int chr_read_ro(uint16_t c, uint16_t a, struct ble_gatt_access_ctxt *ctxt, void *arg)
@@ -163,8 +179,9 @@ static int chr_read_ro(uint16_t c, uint16_t a, struct ble_gatt_access_ctxt *ctxt
 static int chr_report(uint16_t c, uint16_t a, struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
     if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
-        uint8_t z = 0;   /* current state = no key */
-        return os_mbuf_append(ctxt->om, &z, 1) == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
+        int len = (int)(intptr_t)arg;    /* report length: 2 (consumer) or 8 (keyboard) */
+        uint8_t z[8] = {0};              /* current state = no key */
+        return os_mbuf_append(ctxt->om, z, len) == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
     }
     return 0;
 }
@@ -185,7 +202,8 @@ static int chr_ctrl_point(uint16_t c, uint16_t a, struct ble_gatt_access_ctxt *c
 
 static int dsc_report_ref(uint16_t c, uint16_t a, struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
-    return os_mbuf_append(ctxt->om, report_ref, sizeof(report_ref)) == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
+    const struct ro_val *v = arg;     /* per-report reference: &rv_ref_cc or &rv_ref_kbd */
+    return os_mbuf_append(ctxt->om, v->p, v->len) == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
 }
 
 static const struct ble_gatt_svc_def gatt_svcs[] = {
@@ -201,11 +219,18 @@ static const struct ble_gatt_svc_def gatt_svcs[] = {
               .flags = BLE_GATT_CHR_F_WRITE_NO_RSP },
             { .uuid = BLE_UUID16_DECLARE(0x2A4E), .access_cb = chr_proto_mode,
               .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE_NO_RSP },
-            { .uuid = BLE_UUID16_DECLARE(0x2A4D), .access_cb = chr_report,
+            { .uuid = BLE_UUID16_DECLARE(0x2A4D), .access_cb = chr_report, .arg = (void *)(intptr_t)2,
               .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_ENC | BLE_GATT_CHR_F_NOTIFY,
               .val_handle = &report_val_handle,
               .descriptors = (struct ble_gatt_dsc_def[]) {
-                  { .uuid = BLE_UUID16_DECLARE(0x2908), .att_flags = BLE_ATT_F_READ, .access_cb = dsc_report_ref },
+                  { .uuid = BLE_UUID16_DECLARE(0x2908), .att_flags = BLE_ATT_F_READ, .access_cb = dsc_report_ref, .arg = (void *)&rv_ref_cc },
+                  { 0 }
+              } },
+            { .uuid = BLE_UUID16_DECLARE(0x2A4D), .access_cb = chr_report, .arg = (void *)(intptr_t)8,
+              .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_ENC | BLE_GATT_CHR_F_NOTIFY,
+              .val_handle = &report_val_handle_kbd,
+              .descriptors = (struct ble_gatt_dsc_def[]) {
+                  { .uuid = BLE_UUID16_DECLARE(0x2908), .att_flags = BLE_ATT_F_READ, .access_cb = dsc_report_ref, .arg = (void *)&rv_ref_kbd },
                   { 0 }
               } },
             { 0 }
@@ -225,18 +250,29 @@ static const struct ble_gatt_svc_def gatt_svcs[] = {
 
 /* ---- send a Consumer-Control bit (press + release); bits per hid_report_map:
  * 0x01 Power, 0x02 Menu, 0x04 Vol+, 0x08 Vol-, 0x10 Mute, 0x20 Play/Pause ---- */
-static void send_cc(uint8_t bits, const char *name)
+static void send_cc(uint16_t usage, const char *name)   /* Consumer Control (report 1) */
 {
     if (conn_handle == BLE_HS_CONN_HANDLE_NONE) { applog("%s: not connected", name); return; }
     applog("send: %s", name);
-    uint8_t down = bits, up = 0x00;
-    struct os_mbuf *om = ble_hs_mbuf_from_flat(&down, 1);
+    uint8_t down[2] = { (uint8_t)(usage & 0xFF), (uint8_t)(usage >> 8) }, up[2] = { 0, 0 };
+    struct os_mbuf *om = ble_hs_mbuf_from_flat(down, 2);
     ble_gatts_notify_custom(conn_handle, report_val_handle, om);
     vTaskDelay(pdMS_TO_TICKS(40));
-    om = ble_hs_mbuf_from_flat(&up, 1);
+    om = ble_hs_mbuf_from_flat(up, 2);
     ble_gatts_notify_custom(conn_handle, report_val_handle, om);
 }
-static void send_power(void) { send_cc(0x01, "Power"); }
+static void send_key(uint8_t key, const char *name)     /* Keyboard usage (report 2) */
+{
+    if (conn_handle == BLE_HS_CONN_HANDLE_NONE) { applog("%s: not connected", name); return; }
+    applog("send: %s", name);
+    uint8_t down[8] = { 0, 0, key, 0, 0, 0, 0, 0 }, up[8] = { 0 };
+    struct os_mbuf *om = ble_hs_mbuf_from_flat(down, 8);
+    ble_gatts_notify_custom(conn_handle, report_val_handle_kbd, om);
+    vTaskDelay(pdMS_TO_TICKS(40));
+    om = ble_hs_mbuf_from_flat(up, 8);
+    ble_gatts_notify_custom(conn_handle, report_val_handle_kbd, om);
+}
+static void send_power(void) { send_cc(0x0030, "Power"); }
 
 /* ---- GAP event handler ---- */
 static int gap_event(struct ble_gap_event *event, void *arg)
@@ -450,11 +486,6 @@ static void beamer_off(void)
     else applog("OFF: not connected (already off?)");
 }
 
-/* Volume / mute — only meaningful while the beamer is on (connected). */
-static void beamer_volup(void)   { send_cc(0x04, "Vol+"); }
-static void beamer_voldown(void) { send_cc(0x08, "Vol-"); }
-static void beamer_mute(void)    { send_cc(0x10, "Mute"); }
-
 /* ---- WiFi STA ---- */
 static void wifi_evt(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
@@ -491,34 +522,93 @@ static void wifi_init(void)
 static const char INDEX_HTML[] =
 "<!doctype html><html><head><meta charset=utf-8>"
 "<meta name=viewport content='width=device-width,initial-scale=1'>"
-"<title>JMGO Beamer</title><style>"
+"<title>ESP32 Remote</title><style>"
 "body{font-family:system-ui,sans-serif;background:#111;color:#eee;max-width:560px;margin:1.5em auto;padding:0 1em}"
 "h1{font-size:1.3em}button{font-size:1.1em;padding:.7em 1.5em;margin:.3em .3em 0 0;border:0;border-radius:10px;cursor:pointer}"
-".on{background:#2e7d32;color:#fff}.off{background:#555;color:#fff}.k{background:#37474f;color:#fff}"
+".on{background:#2e7d32;color:#fff}.off{background:#555;color:#fff}.k{background:#37474f;color:#fff}.ok{background:#1565c0;color:#fff}"
+".box{background:#1b1b1b;border:1px solid #333;border-radius:14px;padding:.8em .6em;margin:.8em 0;text-align:center}"
+".row{margin-top:.4em}.dpad{display:inline-grid;grid-template-columns:repeat(3,66px);grid-template-areas:'. up .' 'lt ok rt' '. dn .';gap:.3em;margin:.6em auto}.dpad button{margin:0;width:66px;padding:.6em 0}"
 "#log{margin-top:1em;background:#000;color:#3f6;font:12px/1.4 monospace;padding:.6em;border-radius:10px;height:320px;overflow:auto;white-space:pre-wrap}"
 "</style></head><body>"
-"<h1>JMGO Beamer (BT) <small style='opacity:.55;font-size:.6em'>v" FW_VERSION "</small></h1>"
-"<button class=on onclick=\"go('/api/beamer/on')\">Ein</button>"
-"<button class=off onclick=\"go('/api/beamer/off')\">Aus</button>"
-"<div style='margin-top:.4em'>"
-"<button class=k onclick=\"go('/api/beamer/voldown')\">Vol &minus;</button>"
-"<button class=k onclick=\"go('/api/beamer/mute')\">Mute</button>"
-"<button class=k onclick=\"go('/api/beamer/volup')\">Vol &plus;</button>"
+"<h1>ESP32 Remote <small style='opacity:.55;font-size:.6em'>v" FW_VERSION "</small></h1>"
+"<div id=st style='font-weight:bold;margin:.2em 0;color:#888'>\xE2\x80\xA6</div>"
+"<div class=box>"
+"<div class=row><button class=on onclick=\"go('on')\">Ein</button><button class=off onclick=\"go('off')\">Aus</button></div>"
+"<div class=dpad>"
+"<button class=k style='grid-area:up' onclick=\"go('up')\">\xE2\x96\xB2</button>"
+"<button class=k style='grid-area:lt' onclick=\"go('left')\">\xE2\x97\x80</button>"
+"<button class=ok style='grid-area:ok' onclick=\"go('ok')\">OK</button>"
+"<button class=k style='grid-area:rt' onclick=\"go('right')\">\xE2\x96\xB6</button>"
+"<button class=k style='grid-area:dn' onclick=\"go('down')\">\xE2\x96\xBC</button>"
+"</div>"
+"<div class=row><button class=k onclick=\"go('back')\">\xE2\x86\x90 Back</button><button class=k onclick=\"go('home')\">\xE2\x8C\x82 Home</button></div>"
+"<div class=row><button class=k onclick=\"go('menu')\">\xE2\x98\xB0 Menu</button><button class=k onclick=\"go('settings')\">\xE2\x9A\x99 Settings</button></div>"
+"<div class=row><button class=k onclick=\"go('input')\">\xE2\x87\xA5 Input / HDMI</button></div>"
+"<div class=row><button class=k onclick=\"go('voldown')\">Vol \xE2\x88\x92</button><button class=k onclick=\"go('mute')\">Mute</button><button class=k onclick=\"go('volup')\">Vol +</button></div>"
 "</div>"
 "<p style='opacity:.45;font-size:.8em'>Firmware-Update per <code>make push</code> (OTA)</p>"
 "<div id=log>...</div>"
 "<script>"
-"function go(u){fetch(u).then(r=>r.text()).then(_=>setTimeout(load,400));}"
+"function go(k){fetch('/api/beamer/'+k).then(r=>r.text()).then(_=>setTimeout(load,400));}"
 "function load(){fetch('/log').then(r=>r.text()).then(t=>{var l=document.getElementById('log');l.textContent=t;l.scrollTop=l.scrollHeight;});}"
-"setInterval(load,2000);load();"
+"function ps(){fetch('/api/status').then(r=>r.json()).then(j=>{var e=document.getElementById('st');e.textContent=j.connected?'\xE2\x97\x8F Connected':'\xE2\x97\x8B Disconnected';e.style.color=j.connected?'#3f6':'#f66';}).catch(_=>{});}"
+"setInterval(load,2000);setInterval(ps,2000);load();ps();"
 "</script></body></html>";
 
 static esp_err_t h_root(httpd_req_t *r){ httpd_resp_set_type(r,"text/html"); return httpd_resp_send(r, INDEX_HTML, HTTPD_RESP_USE_STRLEN); }
-static esp_err_t h_on (httpd_req_t *r){ beamer_on();  httpd_resp_set_type(r,"text/plain"); return httpd_resp_sendstr(r,"ok\n"); }
-static esp_err_t h_off(httpd_req_t *r){ beamer_off(); httpd_resp_set_type(r,"text/plain"); return httpd_resp_sendstr(r,"ok\n"); }
-static esp_err_t h_volup (httpd_req_t *r){ beamer_volup();   httpd_resp_set_type(r,"text/plain"); return httpd_resp_sendstr(r,"ok\n"); }
-static esp_err_t h_voldn (httpd_req_t *r){ beamer_voldown(); httpd_resp_set_type(r,"text/plain"); return httpd_resp_sendstr(r,"ok\n"); }
-static esp_err_t h_mute  (httpd_req_t *r){ beamer_mute();    httpd_resp_set_type(r,"text/plain"); return httpd_resp_sendstr(r,"ok\n"); }
+static esp_err_t h_status(httpd_req_t *r)
+{
+    char buf[96];
+    int n = snprintf(buf, sizeof buf, "{\"connected\":%s,\"version\":\"%s\"}\n",
+                     conn_handle != BLE_HS_CONN_HANDLE_NONE ? "true" : "false", FW_VERSION);
+    httpd_resp_set_type(r, "application/json");
+    return httpd_resp_send(r, buf, n);
+}
+/* Key table for /api/beamer/<key>. cc != 0 -> Consumer usage; key != 0 -> keyboard. */
+static const struct { const char *act; uint16_t cc; uint8_t key; } KEYS[] = {
+    { "power",    0x0030, 0 },
+    { "volup",    0x00E9, 0 },
+    { "voldown",  0x00EA, 0 },
+    { "mute",     0x00E2, 0 },
+    { "menu",     0x0040, 0 },   /* TODO: no effect on JMGO yet (vendor-specific; sniff remote) */
+    { "home",     0x0223, 0 },
+    { "back",     0x0224, 0 },
+    { "settings", 0x0183, 0 },   /* TODO: no effect on JMGO yet (vendor-specific; sniff remote) */
+    { "input",    0x0089, 0 },   /* TODO: no effect on JMGO yet (vendor-specific; sniff remote) */
+    { "up",    0, 0x52 },
+    { "down",  0, 0x51 },
+    { "left",  0, 0x50 },
+    { "right", 0, 0x4F },
+    { "ok",    0, 0x28 },         /* Enter = D-pad center */
+};
+
+/* GET /api/beamer/<key> — on/off are special; rest map via KEYS. */
+static esp_err_t h_beamer(httpd_req_t *r)
+{
+    const char *slash = strrchr(r->uri, '/');
+    const char *src = slash ? slash + 1 : r->uri;
+    char act[24];
+    size_t n = strcspn(src, "?");          /* action = path tail up to query string */
+    if (n >= sizeof act) n = sizeof act - 1;
+    memcpy(act, src, n);
+    act[n] = 0;
+
+    httpd_resp_set_type(r, "text/plain");
+    if (!strcmp(act, "on"))  { beamer_on();  return httpd_resp_sendstr(r, "ok\n"); }
+    if (!strcmp(act, "off")) { beamer_off(); return httpd_resp_sendstr(r, "ok\n"); }
+    /* tuning: /api/beamer/cc?u=<hex> (consumer) or /api/beamer/key?k=<hex> (keyboard) */
+    if (!strcmp(act, "cc"))  { const char *u = strstr(r->uri, "u="); send_cc((uint16_t)(u ? strtol(u + 2, NULL, 16) : 0), "cc"); return httpd_resp_sendstr(r, "ok\n"); }
+    if (!strcmp(act, "key")) { const char *u = strstr(r->uri, "k="); send_key((uint8_t)(u ? strtol(u + 2, NULL, 16) : 0), "key"); return httpd_resp_sendstr(r, "ok\n"); }
+    for (size_t i = 0; i < sizeof KEYS / sizeof KEYS[0]; i++) {
+        if (!strcmp(act, KEYS[i].act)) {
+            if (KEYS[i].key) send_key(KEYS[i].key, act);
+            else             send_cc(KEYS[i].cc, act);
+            return httpd_resp_sendstr(r, "ok\n");
+        }
+    }
+    httpd_resp_send_err(r, HTTPD_404_NOT_FOUND, "unknown key\n");
+    return ESP_FAIL;
+}
 static esp_err_t h_log(httpd_req_t *r)
 {
     httpd_resp_set_type(r, "text/plain");
@@ -584,18 +674,16 @@ static void http_start(void)
     cfg.lru_purge_enable = true;
     cfg.recv_wait_timeout = 10;        /* generous for OTA upload */
     cfg.send_wait_timeout = 10;
+    cfg.uri_match_fn = httpd_uri_match_wildcard;
     httpd_handle_t s = NULL;
     if (httpd_start(&s, &cfg) != ESP_OK) { applog("http: start FAILED"); return; }
     httpd_uri_t u;
-    u = (httpd_uri_t){ .uri = "/",                .method = HTTP_GET,  .handler = h_root }; httpd_register_uri_handler(s, &u);
-    u = (httpd_uri_t){ .uri = "/api/beamer/on",   .method = HTTP_GET,  .handler = h_on   }; httpd_register_uri_handler(s, &u);
-    u = (httpd_uri_t){ .uri = "/api/beamer/off",  .method = HTTP_GET,  .handler = h_off  }; httpd_register_uri_handler(s, &u);
-    u = (httpd_uri_t){ .uri = "/api/beamer/volup",   .method = HTTP_GET, .handler = h_volup }; httpd_register_uri_handler(s, &u);
-    u = (httpd_uri_t){ .uri = "/api/beamer/voldown", .method = HTTP_GET, .handler = h_voldn }; httpd_register_uri_handler(s, &u);
-    u = (httpd_uri_t){ .uri = "/api/beamer/mute",    .method = HTTP_GET, .handler = h_mute  }; httpd_register_uri_handler(s, &u);
-    u = (httpd_uri_t){ .uri = "/log",             .method = HTTP_GET,  .handler = h_log  }; httpd_register_uri_handler(s, &u);
-    u = (httpd_uri_t){ .uri = "/api/ota/upload",  .method = HTTP_POST, .handler = h_ota  }; httpd_register_uri_handler(s, &u);
-    applog("http: server on :80  (on/off, volup/voldown/mute, /log, /api/ota/upload)");
+    u = (httpd_uri_t){ .uri = "/",               .method = HTTP_GET,  .handler = h_root   }; httpd_register_uri_handler(s, &u);
+    u = (httpd_uri_t){ .uri = "/log",            .method = HTTP_GET,  .handler = h_log    }; httpd_register_uri_handler(s, &u);
+    u = (httpd_uri_t){ .uri = "/api/status",     .method = HTTP_GET,  .handler = h_status }; httpd_register_uri_handler(s, &u);
+    u = (httpd_uri_t){ .uri = "/api/ota/upload", .method = HTTP_POST, .handler = h_ota    }; httpd_register_uri_handler(s, &u);
+    u = (httpd_uri_t){ .uri = "/api/beamer/*",   .method = HTTP_GET,  .handler = h_beamer }; httpd_register_uri_handler(s, &u);
+    applog("http: server :80  (/, /log, /api/ota/upload, /api/beamer/<key>)");
 }
 
 void app_main(void)
