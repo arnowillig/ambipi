@@ -223,18 +223,20 @@ static const struct ble_gatt_svc_def gatt_svcs[] = {
     { 0 }
 };
 
-/* ---- send Consumer "Power" (bit0): press + release ---- */
-static void send_power(void)
+/* ---- send a Consumer-Control bit (press + release); bits per hid_report_map:
+ * 0x01 Power, 0x02 Menu, 0x04 Vol+, 0x08 Vol-, 0x10 Mute, 0x20 Play/Pause ---- */
+static void send_cc(uint8_t bits, const char *name)
 {
-    if (conn_handle == BLE_HS_CONN_HANDLE_NONE) { applog("send: not connected"); return; }
-    applog("send: Consumer POWER");
-    uint8_t down = 0x01, up = 0x00;
+    if (conn_handle == BLE_HS_CONN_HANDLE_NONE) { applog("%s: not connected", name); return; }
+    applog("send: %s", name);
+    uint8_t down = bits, up = 0x00;
     struct os_mbuf *om = ble_hs_mbuf_from_flat(&down, 1);
     ble_gatts_notify_custom(conn_handle, report_val_handle, om);
     vTaskDelay(pdMS_TO_TICKS(40));
     om = ble_hs_mbuf_from_flat(&up, 1);
     ble_gatts_notify_custom(conn_handle, report_val_handle, om);
 }
+static void send_power(void) { send_cc(0x01, "Power"); }
 
 /* ---- GAP event handler ---- */
 static int gap_event(struct ble_gap_event *event, void *arg)
@@ -448,6 +450,11 @@ static void beamer_off(void)
     else applog("OFF: not connected (already off?)");
 }
 
+/* Volume / mute — only meaningful while the beamer is on (connected). */
+static void beamer_volup(void)   { send_cc(0x04, "Vol+"); }
+static void beamer_voldown(void) { send_cc(0x08, "Vol-"); }
+static void beamer_mute(void)    { send_cc(0x10, "Mute"); }
+
 /* ---- WiFi STA ---- */
 static void wifi_evt(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
@@ -487,12 +494,17 @@ static const char INDEX_HTML[] =
 "<title>JMGO Beamer</title><style>"
 "body{font-family:system-ui,sans-serif;background:#111;color:#eee;max-width:560px;margin:1.5em auto;padding:0 1em}"
 "h1{font-size:1.3em}button{font-size:1.1em;padding:.7em 1.5em;margin:.3em .3em 0 0;border:0;border-radius:10px;cursor:pointer}"
-".on{background:#2e7d32;color:#fff}.off{background:#555;color:#fff}"
+".on{background:#2e7d32;color:#fff}.off{background:#555;color:#fff}.k{background:#37474f;color:#fff}"
 "#log{margin-top:1em;background:#000;color:#3f6;font:12px/1.4 monospace;padding:.6em;border-radius:10px;height:320px;overflow:auto;white-space:pre-wrap}"
 "</style></head><body>"
 "<h1>JMGO Beamer (BT) <small style='opacity:.55;font-size:.6em'>v" FW_VERSION "</small></h1>"
 "<button class=on onclick=\"go('/api/beamer/on')\">Ein</button>"
 "<button class=off onclick=\"go('/api/beamer/off')\">Aus</button>"
+"<div style='margin-top:.4em'>"
+"<button class=k onclick=\"go('/api/beamer/voldown')\">Vol &minus;</button>"
+"<button class=k onclick=\"go('/api/beamer/mute')\">Mute</button>"
+"<button class=k onclick=\"go('/api/beamer/volup')\">Vol &plus;</button>"
+"</div>"
 "<p style='opacity:.45;font-size:.8em'>Firmware-Update per <code>make push</code> (OTA)</p>"
 "<div id=log>...</div>"
 "<script>"
@@ -504,6 +516,9 @@ static const char INDEX_HTML[] =
 static esp_err_t h_root(httpd_req_t *r){ httpd_resp_set_type(r,"text/html"); return httpd_resp_send(r, INDEX_HTML, HTTPD_RESP_USE_STRLEN); }
 static esp_err_t h_on (httpd_req_t *r){ beamer_on();  httpd_resp_set_type(r,"text/plain"); return httpd_resp_sendstr(r,"ok\n"); }
 static esp_err_t h_off(httpd_req_t *r){ beamer_off(); httpd_resp_set_type(r,"text/plain"); return httpd_resp_sendstr(r,"ok\n"); }
+static esp_err_t h_volup (httpd_req_t *r){ beamer_volup();   httpd_resp_set_type(r,"text/plain"); return httpd_resp_sendstr(r,"ok\n"); }
+static esp_err_t h_voldn (httpd_req_t *r){ beamer_voldown(); httpd_resp_set_type(r,"text/plain"); return httpd_resp_sendstr(r,"ok\n"); }
+static esp_err_t h_mute  (httpd_req_t *r){ beamer_mute();    httpd_resp_set_type(r,"text/plain"); return httpd_resp_sendstr(r,"ok\n"); }
 static esp_err_t h_log(httpd_req_t *r)
 {
     httpd_resp_set_type(r, "text/plain");
@@ -575,9 +590,12 @@ static void http_start(void)
     u = (httpd_uri_t){ .uri = "/",                .method = HTTP_GET,  .handler = h_root }; httpd_register_uri_handler(s, &u);
     u = (httpd_uri_t){ .uri = "/api/beamer/on",   .method = HTTP_GET,  .handler = h_on   }; httpd_register_uri_handler(s, &u);
     u = (httpd_uri_t){ .uri = "/api/beamer/off",  .method = HTTP_GET,  .handler = h_off  }; httpd_register_uri_handler(s, &u);
+    u = (httpd_uri_t){ .uri = "/api/beamer/volup",   .method = HTTP_GET, .handler = h_volup }; httpd_register_uri_handler(s, &u);
+    u = (httpd_uri_t){ .uri = "/api/beamer/voldown", .method = HTTP_GET, .handler = h_voldn }; httpd_register_uri_handler(s, &u);
+    u = (httpd_uri_t){ .uri = "/api/beamer/mute",    .method = HTTP_GET, .handler = h_mute  }; httpd_register_uri_handler(s, &u);
     u = (httpd_uri_t){ .uri = "/log",             .method = HTTP_GET,  .handler = h_log  }; httpd_register_uri_handler(s, &u);
     u = (httpd_uri_t){ .uri = "/api/ota/upload",  .method = HTTP_POST, .handler = h_ota  }; httpd_register_uri_handler(s, &u);
-    applog("http: server on :80  (/, /api/beamer/on, /api/beamer/off, /log, /api/ota/upload)");
+    applog("http: server on :80  (on/off, volup/voldown/mute, /log, /api/ota/upload)");
 }
 
 void app_main(void)
