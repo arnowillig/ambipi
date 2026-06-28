@@ -48,6 +48,7 @@ RESTServer::RESTServer(AmbiPi* ambiPi) : _ambiPi(ambiPi)
 	Rest::Routes::Get(_router, "/api/beamer/voldown",   Rest::Routes::bind(&RESTServer::beamerVolDown, this));
 	Rest::Routes::Get(_router, "/api/beamer/mute",      Rest::Routes::bind(&RESTServer::beamerMute, this));
 	Rest::Routes::Get(_router, "/api/beamer/playpause", Rest::Routes::bind(&RESTServer::beamerPlayPause, this));
+	Rest::Routes::Get(_router, "/api/beamer/settings",  Rest::Routes::bind(&RESTServer::beamerSettings,  this));
 
 	Rest::Routes::Get(_router, "/api/appletv/on",  Rest::Routes::bind(&RESTServer::appleTvOn, this));
 	Rest::Routes::Get(_router, "/api/appletv/off", Rest::Routes::bind(&RESTServer::appleTvOff, this));
@@ -579,6 +580,14 @@ void RESTServer::beamerPlayPause(const Rest::Request &request, Http::ResponseWri
 {
 	(void) request;
 	bool ok = _atv.sendKey(85);
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	response.send(Http::Code::Ok, ok ? "ok\n" : "error\n");
+}
+
+void RESTServer::beamerSettings(const Rest::Request &request, Http::ResponseWriter response)
+{
+	(void) request;
+	bool ok = _atv.sendKey(176); // KEYCODE_SETTINGS
 	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, ok ? "ok\n" : "error\n");
 }

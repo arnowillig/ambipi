@@ -32,7 +32,7 @@ unless noted. CORS-free, no auth — intended for the local LAN.
 | `home` | Home | Consumer AC Home `0x0223` | connected |
 | `menu` | Menu | Consumer Menu `0x0040` | connected |
 | `settings` | Settings (best-effort) | Consumer AL Control Panel `0x0183` | connected |
-| `input` | Input / HDMI (best-guess) | Consumer Media Select TV `0x0089` | connected |
+| `input` | Input / HDMI (best-guess) | Consumer Media Select Home `0x008D` | connected |
 | `volup` `voldown` `mute` | Volume | Consumer `0x00E9` / `0x00EA` / `0x00E2` | connected |
 
 Tuning (find unknown codes live, no reflash needed):
@@ -41,6 +41,7 @@ Tuning (find unknown codes live, no reflash needed):
 |----------|--------|
 | `GET /api/beamer/cc?u=<hex>` | send an arbitrary **Consumer** usage (e.g. `?u=223` = Home) |
 | `GET /api/beamer/key?k=<hex>` | send an arbitrary **Keyboard** usage (e.g. `?k=28` = Enter) |
+| `GET /api/beamer/vkey?k=<num>` | send an experimental JMGO vendor keycode (`K:<num>,A:1/0`) |
 
 ### Status / system
 
@@ -118,6 +119,7 @@ as the original remote (appearance = Remote Control). The bond persists in NVS.
 ## Notes / tuning
 
 - `settings` and `input` use **best-guess** HID usages and may not work (vendor-specific
-  on the JMGO). Use `/api/beamer/cc?u=<hex>` to probe other codes live; if nothing fits,
-  sniff the original remote (pair it to the Pi as a HID host and log its reports).
+  on the JMGO). Use `/api/beamer/cc?u=<hex>` and `/api/beamer/vkey?k=<num>` to probe
+  other codes live; if nothing fits, sniff the original remote (paired as
+  `JMGO Remote`, e.g. `F4:22:7A:76:93:FA`) as a HID host and log its reports.
 - `back` = Consumer AC Back; if it doesn't register, try Keyboard Escape via `key?k=29`.

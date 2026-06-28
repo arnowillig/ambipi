@@ -73,6 +73,22 @@ static volatile bool secured     = false;
 static volatile bool want_wake   = false;
 static uint32_t wake_ms          = 0;
 
+/* JMGO vendor GATT service used by the official app for Menu/Settings/Input.
+ * Service 00009a9b-0000-1000-8000-00805f9b34fb
+ * Char    00009002-0000-1000-8000-00805f9b34fb
+ * Write text "K:<keycode>,A:1" (down), 150 ms, "K:<keycode>,A:0" (up).
+ * UUIDs in NimBLE little-endian order.                                     */
+static const ble_uuid128_t VENDOR_SVC_UUID = BLE_UUID128_INIT(
+    0xfb,0x34,0x9b,0x5f, 0x80,0x00, 0x00,0x80, 0x00,0x10, 0x00,0x00, 0x9b,0x9a,0x00,0x00);
+static const ble_uuid128_t VENDOR_CHR_UUID = BLE_UUID128_INIT(
+    0xfb,0x34,0x9b,0x5f, 0x80,0x00, 0x00,0x80, 0x00,0x10, 0x00,0x00, 0x02,0x90,0x00,0x00);
+
+static volatile uint16_t vendor_chr_handle = 0; /* cached per-connection; 0 = undiscovered */
+static volatile uint16_t vendor_conn_handle = BLE_HS_CONN_HANDLE_NONE; /* Central connection to beamer */
+static uint16_t vendor_svc_s = 0, vendor_svc_e = 0;
+static SemaphoreHandle_t vendor_sem;
+static volatile bool vendor_busy = false;
+
 /* Captured from the ORIGINAL JMGO remote's wake advertisement (sniffed):
  *   Company: MediaTek (0x0046)
  *   Data:    35 | 2F 61 28 2D D8 B8 (beamer addr, little-endian) | FF FF FF FF
@@ -294,7 +310,7 @@ static int gap_event(struct ble_gap_event *event, void *arg)
         applog("disconnected (reason 0x%x)", event->disconnect.reason);
         conn_handle = BLE_HS_CONN_HANDLE_NONE;
         secured = false;
-        advertise(false);
+        if (!vendor_busy) advertise(false);
         return 0;
 
     case BLE_GAP_EVENT_ENC_CHANGE:
@@ -546,7 +562,7 @@ static const char INDEX_HTML[] =
 "<div class=row><button class=k onclick=\"go('input')\">\xE2\x87\xA5 Input / HDMI</button></div>"
 "<div class=row><button class=k onclick=\"go('voldown')\">Vol \xE2\x88\x92</button><button class=k onclick=\"go('mute')\">Mute</button><button class=k onclick=\"go('volup')\">Vol +</button></div>"
 "</div>"
-"<p style='opacity:.45;font-size:.8em'>Firmware-Update per <code>make push</code> (OTA)</p>"
+"<p style='opacity:.45;font-size:.8em'>Firmware-Update per <code>make push</code> (OTA) &nbsp;|&nbsp; <button class=off style='font-size:.8em;padding:.3em .8em' onclick=\"if(confirm('ESP32 neu starten?'))fetch('/api/reboot')\">Reboot</button></p>"
 "<div id=log>...</div>"
 "<script>"
 "function go(k){fetch('/api/beamer/'+k).then(r=>r.text()).then(_=>setTimeout(load,400));}"
@@ -564,22 +580,144 @@ static esp_err_t h_status(httpd_req_t *r)
     httpd_resp_set_type(r, "application/json");
     return httpd_resp_send(r, buf, n);
 }
-/* Key table for /api/beamer/<key>. cc != 0 -> Consumer usage; key != 0 -> keyboard. */
+/* ---- Vendor GATT discovery + write (runs in its own FreeRTOS task) ---- */
+static int vendor_chr_disc_cb(uint16_t ch, const struct ble_gatt_error *err,
+                               const struct ble_gatt_chr *chr, void *arg)
+{
+    if (err->status == 0 && chr) vendor_chr_handle = chr->val_handle;
+    else if (err->status == BLE_HS_EDONE) xSemaphoreGive(vendor_sem);
+    return 0;
+}
+static int vendor_svc_disc_cb(uint16_t ch, const struct ble_gatt_error *err,
+                               const struct ble_gatt_svc *svc, void *arg)
+{
+    if (err->status == 0 && svc) { vendor_svc_s = svc->start_handle; vendor_svc_e = svc->end_handle; }
+    else if (err->status == BLE_HS_EDONE) {
+        if (vendor_svc_s)
+            ble_gattc_disc_chrs_by_uuid(ch, vendor_svc_s, vendor_svc_e, &VENDOR_CHR_UUID.u, vendor_chr_disc_cb, NULL);
+        else
+            xSemaphoreGive(vendor_sem); /* not found */
+    }
+    return 0;
+}
+static int vendor_write_cb(uint16_t ch, const struct ble_gatt_error *err,
+                            struct ble_gatt_attr *attr, void *arg)
+{
+    xSemaphoreGive(vendor_sem);
+    return 0;
+}
+/* GAP callback for the ESP32-as-Central vendor connection (separate from HID Peripheral conn) */
+static int vendor_gap_cb(struct ble_gap_event *event, void *arg)
+{
+    switch (event->type) {
+    case BLE_GAP_EVENT_CONNECT:
+        if (event->connect.status == 0) {
+            vendor_conn_handle = event->connect.conn_handle;
+            applog("vendor: Central connected (h=%d)", vendor_conn_handle);
+        } else {
+            applog("vendor: Central connect failed (status=%d)", event->connect.status);
+        }
+        xSemaphoreGive(vendor_sem);
+        return 0;
+    case BLE_GAP_EVENT_DISCONNECT:
+        applog("vendor: Central disconnected");
+        vendor_conn_handle = BLE_HS_CONN_HANDLE_NONE;
+        vendor_chr_handle = 0;
+        return 0;
+    }
+    return 0;
+}
+
+static void vendor_key_task(void *arg)
+{
+    int keycode = (int)(intptr_t)arg;
+
+    /* NimBLE returns BLE_HS_EALREADY (rc=14) if we try to connect to an already-connected peer.
+     * Fix: drop the HID Peripheral connection first, then connect as Central for vendor GATT.
+     * gap_event DISCONNECT checks vendor_busy to skip re-advertising during this window.      */
+    if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
+        applog("vendor: dropping HID to connect as Central...");
+        ble_gap_terminate(conn_handle, 0x13);
+        vTaskDelay(pdMS_TO_TICKS(600));
+    }
+
+    if (vendor_conn_handle == BLE_HS_CONN_HANDLE_NONE) {
+        applog("vendor: connecting as Central to beamer...");
+        struct ble_gap_conn_params cp = { 0 };
+        cp.scan_itvl = 0x0060;
+        cp.scan_window = 0x0030;
+        cp.itvl_min = 0x0018;
+        cp.itvl_max = 0x0028;
+        cp.latency = 0;
+        cp.supervision_timeout = 0x00C8;
+        cp.min_ce_len = 0;
+        cp.max_ce_len = 0x0100;
+        xSemaphoreTake(vendor_sem, 0);
+        int rc = ble_gap_connect(own_addr_type, &TV_ADDR, 10000, &cp, vendor_gap_cb, NULL);
+        if (rc != 0) { applog("vendor: connect rc=%d", rc); goto done; }
+        if (xSemaphoreTake(vendor_sem, pdMS_TO_TICKS(12000)) != pdTRUE)
+            { applog("vendor: connect timeout"); goto done; }
+        if (vendor_conn_handle == BLE_HS_CONN_HANDLE_NONE) goto done;
+    }
+    uint16_t ch = vendor_conn_handle;
+
+    if (!vendor_chr_handle) {
+        applog("vendor: discovering service...");
+        vendor_svc_s = vendor_svc_e = 0;
+        xSemaphoreTake(vendor_sem, 0);
+        ble_gattc_disc_svc_by_uuid(ch, &VENDOR_SVC_UUID.u, vendor_svc_disc_cb, NULL);
+        if (xSemaphoreTake(vendor_sem, pdMS_TO_TICKS(5000)) != pdTRUE)
+            { applog("vendor: discovery timeout"); goto done; }
+    }
+    if (!vendor_chr_handle) { applog("vendor: service/chr not found"); goto done; }
+
+    char cmd[32]; int n;
+    n = snprintf(cmd, sizeof cmd, "K:%d,A:1", keycode);
+    xSemaphoreTake(vendor_sem, 0);
+    ble_gattc_write_flat(ch, vendor_chr_handle, cmd, n, vendor_write_cb, NULL);
+    xSemaphoreTake(vendor_sem, pdMS_TO_TICKS(1000));
+
+    vTaskDelay(pdMS_TO_TICKS(150));
+
+    n = snprintf(cmd, sizeof cmd, "K:%d,A:0", keycode);
+    xSemaphoreTake(vendor_sem, 0);
+    ble_gattc_write_flat(ch, vendor_chr_handle, cmd, n, vendor_write_cb, NULL);
+    xSemaphoreTake(vendor_sem, pdMS_TO_TICKS(1000));
+
+    applog("vendor: sent K:%d", keycode);
+done:
+    if (vendor_conn_handle != BLE_HS_CONN_HANDLE_NONE)
+        ble_gap_terminate(vendor_conn_handle, 0x13);
+    vTaskDelay(pdMS_TO_TICKS(300));
+    vendor_busy = false;
+    advertise(false);  /* let beamer reconnect HID */
+    vTaskDelete(NULL);
+}
+static void send_vendor_key(int keycode, const char *name)
+{
+    if (vendor_busy) { applog("%s: vendor busy", name); return; }
+    applog("send: %s (vendor K:%d)", name, keycode);
+    vendor_busy = true;
+    xTaskCreate(vendor_key_task, "vkey", 4096, (void *)(intptr_t)keycode, 5, NULL);
+}
+
+/* Key table: cc!=0 -> Consumer HID; key!=0 -> Keyboard HID.
+ * menu/settings/input codes TBD — sniff original remote (F4:22:7A:76:93:FA) for exact codes. */
 static const struct { const char *act; uint16_t cc; uint8_t key; } KEYS[] = {
-    { "power",    0x0030, 0 },
-    { "volup",    0x00E9, 0 },
-    { "voldown",  0x00EA, 0 },
-    { "mute",     0x00E2, 0 },
-    { "menu",     0x0040, 0 },   /* TODO: no effect on JMGO yet (vendor-specific; sniff remote) */
-    { "home",     0x0223, 0 },
-    { "back",     0x0224, 0 },
-    { "settings", 0x0183, 0 },   /* TODO: no effect on JMGO yet (vendor-specific; sniff remote) */
-    { "input",    0x0089, 0 },   /* TODO: no effect on JMGO yet (vendor-specific; sniff remote) */
+    { "power",    0x0030, 0    },
+    { "volup",    0x00E9, 0    },
+    { "voldown",  0x00EA, 0    },
+    { "mute",     0x00E2, 0    },
+    { "menu",     0x0040, 0    },  /* Consumer Menu — confirmed working */
+    { "home",     0x0223, 0    },
+    { "back",     0x0224, 0    },
+    { "settings", 0x0183, 0    },  /* TBD — still searching */
+    { "input",    0x008D, 0    },  /* Consumer Media Select Home — opens input switcher */
     { "up",    0, 0x52 },
     { "down",  0, 0x51 },
     { "left",  0, 0x50 },
     { "right", 0, 0x4F },
-    { "ok",    0, 0x28 },         /* Enter = D-pad center */
+    { "ok",    0, 0x28 },
 };
 
 /* GET /api/beamer/<key> — on/off are special; rest map via KEYS. */
@@ -599,6 +737,7 @@ static esp_err_t h_beamer(httpd_req_t *r)
     /* tuning: /api/beamer/cc?u=<hex> (consumer) or /api/beamer/key?k=<hex> (keyboard) */
     if (!strcmp(act, "cc"))  { const char *u = strstr(r->uri, "u="); send_cc((uint16_t)(u ? strtol(u + 2, NULL, 16) : 0), "cc"); return httpd_resp_sendstr(r, "ok\n"); }
     if (!strcmp(act, "key")) { const char *u = strstr(r->uri, "k="); send_key((uint8_t)(u ? strtol(u + 2, NULL, 16) : 0), "key"); return httpd_resp_sendstr(r, "ok\n"); }
+    if (!strcmp(act, "vkey")) { const char *u = strstr(r->uri, "k="); send_vendor_key((int)(u ? strtol(u + 2, NULL, 0) : 0), "vkey"); return httpd_resp_sendstr(r, "ok\n"); }
     for (size_t i = 0; i < sizeof KEYS / sizeof KEYS[0]; i++) {
         if (!strcmp(act, KEYS[i].act)) {
             if (KEYS[i].key) send_key(KEYS[i].key, act);
@@ -667,6 +806,14 @@ static esp_err_t h_ota(httpd_req_t *r)
     return ESP_OK;
 }
 
+static esp_err_t h_reboot(httpd_req_t *r)
+{
+    httpd_resp_set_type(r, "text/plain");
+    httpd_resp_sendstr(r, "rebooting\n");
+    xTaskCreate(reboot_task, "reboot", 2048, NULL, 5, NULL);
+    return ESP_OK;
+}
+
 static void http_start(void)
 {
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
@@ -682,6 +829,7 @@ static void http_start(void)
     u = (httpd_uri_t){ .uri = "/log",            .method = HTTP_GET,  .handler = h_log    }; httpd_register_uri_handler(s, &u);
     u = (httpd_uri_t){ .uri = "/api/status",     .method = HTTP_GET,  .handler = h_status }; httpd_register_uri_handler(s, &u);
     u = (httpd_uri_t){ .uri = "/api/ota/upload", .method = HTTP_POST, .handler = h_ota    }; httpd_register_uri_handler(s, &u);
+    u = (httpd_uri_t){ .uri = "/api/reboot",     .method = HTTP_GET,  .handler = h_reboot }; httpd_register_uri_handler(s, &u);
     u = (httpd_uri_t){ .uri = "/api/beamer/*",   .method = HTTP_GET,  .handler = h_beamer }; httpd_register_uri_handler(s, &u);
     applog("http: server :80  (/, /log, /api/ota/upload, /api/beamer/<key>)");
 }
@@ -689,6 +837,7 @@ static void http_start(void)
 void app_main(void)
 {
     s_log_mtx = xSemaphoreCreateMutex();
+    vendor_sem = xSemaphoreCreateBinary();
     applog("boot: JMGO beamer-remote v%s", FW_VERSION);
     esp_err_t rc = nvs_flash_init();
     if (rc == ESP_ERR_NVS_NO_FREE_PAGES || rc == ESP_ERR_NVS_NEW_VERSION_FOUND) {

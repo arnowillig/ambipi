@@ -535,6 +535,7 @@ if (beamerOffBtn) beamerOffBtn.addEventListener("click", () => fetch("/api/beame
   ["beamerVolUp", "/api/beamer/volup"],
   ["beamerMute", "/api/beamer/mute"],
   ["beamerPlayPause", "/api/beamer/playpause"],
+  ["beamerSettings", "/api/beamer/settings"],
 ].forEach(([id, url]) => {
   const b = document.getElementById(id);
   if (b) b.addEventListener("click", () => { b.disabled = true; fetch(url).catch(() => {}).finally(() => { b.disabled = false; }); });

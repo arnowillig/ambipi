@@ -69,6 +69,7 @@ public:
 	void beamerVolDown(const Rest::Request &request, Http::ResponseWriter response);
 	void beamerMute(const Rest::Request &request, Http::ResponseWriter response);
 	void beamerPlayPause(const Rest::Request &request, Http::ResponseWriter response);
+	void beamerSettings(const Rest::Request &request, Http::ResponseWriter response);
 	void appleTvOn(const Rest::Request &request, Http::ResponseWriter response);
 	void appleTvOff(const Rest::Request &request, Http::ResponseWriter response);
 	void getShutterStatus(const Rest::Request &request, Http::ResponseWriter response);
