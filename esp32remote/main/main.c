@@ -89,6 +89,17 @@ static uint16_t vendor_svc_s = 0, vendor_svc_e = 0;
 static SemaphoreHandle_t vendor_sem;
 static volatile bool vendor_busy = false;
 
+/* ---- HID sniffer state (ESP32 as Central, reads original JMGO remote) ---- */
+/* Original JMGO remote F4:22:7A:76:93:FA (public), little-endian for NimBLE  */
+static const ble_addr_t REMOTE_ADDR = {
+    .type = BLE_ADDR_PUBLIC,
+    .val  = { 0xFA, 0x93, 0x76, 0x7A, 0x22, 0xF4 },
+};
+static volatile uint16_t sniff_conn  = BLE_HS_CONN_HANDLE_NONE;
+static volatile bool     sniff_on    = false;
+static uint16_t          sniff_hid_s = 0, sniff_hid_e = 0;
+static SemaphoreHandle_t sniff_sem;
+
 /* Captured from the ORIGINAL JMGO remote's wake advertisement (sniffed):
  *   Company: MediaTek (0x0046)
  *   Data:    35 | 2F 61 28 2D D8 B8 (beamer addr, little-endian) | FF FF FF FF
@@ -562,10 +573,15 @@ static const char INDEX_HTML[] =
 "<div class=row><button class=k onclick=\"go('input')\">\xE2\x87\xA5 Input / HDMI</button></div>"
 "<div class=row><button class=k onclick=\"go('voldown')\">Vol \xE2\x88\x92</button><button class=k onclick=\"go('mute')\">Mute</button><button class=k onclick=\"go('volup')\">Vol +</button></div>"
 "</div>"
+"<div class=box style='margin-top:.6em'>"
+"<div style='opacity:.6;font-size:.85em;margin-bottom:.4em'>HID Sniffer (original remote)</div>"
+"<div class=row><button class=k onclick=\"go2('sniff/start')\">Sniff Start</button><button class=off onclick=\"go2('sniff/stop')\">Sniff Stop</button></div>"
+"</div>"
 "<p style='opacity:.45;font-size:.8em'>Firmware-Update per <code>make push</code> (OTA) &nbsp;|&nbsp; <button class=off style='font-size:.8em;padding:.3em .8em' onclick=\"if(confirm('ESP32 neu starten?'))fetch('/api/reboot')\">Reboot</button></p>"
 "<div id=log>...</div>"
 "<script>"
 "function go(k){fetch('/api/beamer/'+k).then(r=>r.text()).then(_=>setTimeout(load,400));}"
+"function go2(k){fetch('/api/'+k).then(r=>r.text()).then(_=>setTimeout(load,800));}"
 "function load(){fetch('/log').then(r=>r.text()).then(t=>{var l=document.getElementById('log');l.textContent=t;l.scrollTop=l.scrollHeight;});}"
 "function ps(){fetch('/api/status').then(r=>r.json()).then(j=>{var e=document.getElementById('st');e.textContent=j.connected?'\xE2\x97\x8F Connected':'\xE2\x97\x8B Disconnected';e.style.color=j.connected?'#3f6':'#f66';}).catch(_=>{});}"
 "setInterval(load,2000);setInterval(ps,2000);load();ps();"
@@ -701,6 +717,127 @@ static void send_vendor_key(int keycode, const char *name)
     xTaskCreate(vendor_key_task, "vkey", 4096, (void *)(intptr_t)keycode, 5, NULL);
 }
 
+/* ---- HID sniffer implementation ------------------------------------------ */
+static int sniff_svc_cb(uint16_t ch, const struct ble_gatt_error *err,
+                         const struct ble_gatt_svc *svc, void *arg)
+{
+    if (err->status == 0 && svc) { sniff_hid_s = svc->start_handle; sniff_hid_e = svc->end_handle; }
+    else if (err->status == BLE_HS_EDONE) xSemaphoreGive(sniff_sem);
+    return 0;
+}
+static int sniff_chr_cb(uint16_t ch, const struct ble_gatt_error *err,
+                         const struct ble_gatt_chr *chr, void *arg)
+{
+    if (err->status == 0 && chr && (chr->properties & BLE_GATT_CHR_PROP_NOTIFY)) {
+        uint16_t ccc = chr->val_handle + 1;
+        uint16_t val = 0x0100;
+        ble_gattc_write_flat(ch, ccc, &val, 2, NULL, NULL);
+        applog("sniff: subscribed chr=0x%04x CCC=0x%04x", chr->val_handle, ccc);
+    } else if (err->status == BLE_HS_EDONE) {
+        xSemaphoreGive(sniff_sem);
+    }
+    return 0;
+}
+static int sniff_gap_cb(struct ble_gap_event *event, void *arg)
+{
+    switch (event->type) {
+    case BLE_GAP_EVENT_CONNECT:
+        sniff_conn = (event->connect.status == 0) ? event->connect.conn_handle
+                                                   : BLE_HS_CONN_HANDLE_NONE;
+        if (event->connect.status != 0) applog("sniff: connect failed status=%d", event->connect.status);
+        xSemaphoreGive(sniff_sem);
+        return 0;
+    case BLE_GAP_EVENT_DISCONNECT:
+        applog("sniff: disconnected");
+        sniff_conn = BLE_HS_CONN_HANDLE_NONE;
+        sniff_on = false;
+        return 0;
+    case BLE_GAP_EVENT_ENC_CHANGE:
+        applog("sniff: encryption status=%d", event->enc_change.status);
+        return 0;
+    case BLE_GAP_EVENT_PASSKEY_ACTION:
+        if (event->passkey.params.action == BLE_SM_IOACT_NUMCMP) {
+            applog("sniff: passkey %06" PRIu32 " -> accept", event->passkey.params.numcmp);
+            struct ble_sm_io io = { .action = BLE_SM_IOACT_NUMCMP, .numcmp_accept = 1 };
+            ble_sm_inject_io(event->passkey.conn_handle, &io);
+        }
+        return 0;
+    case BLE_GAP_EVENT_NOTIFY_RX:
+        if (event->notify_rx.conn_handle == sniff_conn) {
+            struct os_mbuf *m = event->notify_rx.om;
+            char hex[64]; int pos = 0;
+            for (uint16_t i = 0; i < m->om_len && pos < (int)sizeof(hex) - 3; i++)
+                pos += snprintf(hex + pos, 3, "%02x", m->om_data[i]);
+            hex[pos] = 0;
+            applog("sniff: attr=0x%04x data=%s", event->notify_rx.attr_handle, hex);
+        }
+        return 0;
+    }
+    return 0;
+}
+static void sniff_task(void *arg)
+{
+    sniff_on = true;
+    sniff_conn = BLE_HS_CONN_HANDLE_NONE;
+    xSemaphoreTake(sniff_sem, 0);
+
+    applog("sniff: connecting to original remote F4:22:7A:76:93:FA...");
+    struct ble_gap_conn_params cp = {
+        .scan_itvl = 0x0060, .scan_window = 0x0030,
+        .itvl_min = 0x0018, .itvl_max = 0x0028,
+        .latency = 0, .supervision_timeout = 0x00C8,
+        .min_ce_len = 0, .max_ce_len = 0x0100,
+    };
+    int rc = ble_gap_connect(own_addr_type, &REMOTE_ADDR, 15000, &cp, sniff_gap_cb, NULL);
+    if (rc != 0) { applog("sniff: connect rc=%d", rc); goto done; }
+    if (xSemaphoreTake(sniff_sem, pdMS_TO_TICKS(16000)) != pdTRUE)
+        { applog("sniff: connect timeout"); goto done; }
+    if (sniff_conn == BLE_HS_CONN_HANDLE_NONE) goto done;
+
+    applog("sniff: connected, pairing...");
+    ble_gap_security_initiate(sniff_conn);
+    vTaskDelay(pdMS_TO_TICKS(4000));  /* let NimBLE SM finish bonding */
+    if (sniff_conn == BLE_HS_CONN_HANDLE_NONE) { applog("sniff: lost during pairing"); goto done; }
+
+    { static const ble_uuid16_t HID_SVC = BLE_UUID16_INIT(0x1812);
+      sniff_hid_s = sniff_hid_e = 0;
+      xSemaphoreTake(sniff_sem, 0);
+      ble_gattc_disc_svc_by_uuid(sniff_conn, &HID_SVC.u, sniff_svc_cb, NULL);
+      if (xSemaphoreTake(sniff_sem, pdMS_TO_TICKS(5000)) != pdTRUE || !sniff_hid_s)
+          { applog("sniff: HID svc not found"); goto done; }
+    }
+    applog("sniff: HID svc 0x%04x-0x%04x", sniff_hid_s, sniff_hid_e);
+
+    xSemaphoreTake(sniff_sem, 0);
+    ble_gattc_disc_all_chrs(sniff_conn, sniff_hid_s, sniff_hid_e, sniff_chr_cb, NULL);
+    if (xSemaphoreTake(sniff_sem, pdMS_TO_TICKS(5000)) != pdTRUE)
+        { applog("sniff: char discovery timeout"); goto done; }
+
+    applog("sniff: ready — press buttons on original remote, watch /log");
+    while (sniff_on) vTaskDelay(pdMS_TO_TICKS(100));
+
+done:
+    if (sniff_conn != BLE_HS_CONN_HANDLE_NONE)
+        ble_gap_terminate(sniff_conn, 0x13);
+    sniff_on = false;
+    sniff_conn = BLE_HS_CONN_HANDLE_NONE;
+    applog("sniff: stopped");
+    vTaskDelete(NULL);
+}
+static esp_err_t h_sniff_start(httpd_req_t *r)
+{
+    httpd_resp_set_type(r, "text/plain");
+    if (sniff_on) return httpd_resp_sendstr(r, "already running\n");
+    xTaskCreate(sniff_task, "sniff", 4096, NULL, 5, NULL);
+    return httpd_resp_sendstr(r, "ok\n");
+}
+static esp_err_t h_sniff_stop(httpd_req_t *r)
+{
+    httpd_resp_set_type(r, "text/plain");
+    sniff_on = false;
+    return httpd_resp_sendstr(r, "ok\n");
+}
+
 /* Key table: cc!=0 -> Consumer HID; key!=0 -> Keyboard HID.
  * menu/settings/input codes TBD — sniff original remote (F4:22:7A:76:93:FA) for exact codes. */
 static const struct { const char *act; uint16_t cc; uint8_t key; } KEYS[] = {
@@ -829,8 +966,10 @@ static void http_start(void)
     u = (httpd_uri_t){ .uri = "/log",            .method = HTTP_GET,  .handler = h_log    }; httpd_register_uri_handler(s, &u);
     u = (httpd_uri_t){ .uri = "/api/status",     .method = HTTP_GET,  .handler = h_status }; httpd_register_uri_handler(s, &u);
     u = (httpd_uri_t){ .uri = "/api/ota/upload", .method = HTTP_POST, .handler = h_ota    }; httpd_register_uri_handler(s, &u);
-    u = (httpd_uri_t){ .uri = "/api/reboot",     .method = HTTP_GET,  .handler = h_reboot }; httpd_register_uri_handler(s, &u);
-    u = (httpd_uri_t){ .uri = "/api/beamer/*",   .method = HTTP_GET,  .handler = h_beamer }; httpd_register_uri_handler(s, &u);
+    u = (httpd_uri_t){ .uri = "/api/reboot",      .method = HTTP_GET,  .handler = h_reboot      }; httpd_register_uri_handler(s, &u);
+    u = (httpd_uri_t){ .uri = "/api/sniff/start",.method = HTTP_GET,  .handler = h_sniff_start }; httpd_register_uri_handler(s, &u);
+    u = (httpd_uri_t){ .uri = "/api/sniff/stop", .method = HTTP_GET,  .handler = h_sniff_stop  }; httpd_register_uri_handler(s, &u);
+    u = (httpd_uri_t){ .uri = "/api/beamer/*",   .method = HTTP_GET,  .handler = h_beamer      }; httpd_register_uri_handler(s, &u);
     applog("http: server :80  (/, /log, /api/ota/upload, /api/beamer/<key>)");
 }
 
@@ -838,6 +977,7 @@ void app_main(void)
 {
     s_log_mtx = xSemaphoreCreateMutex();
     vendor_sem = xSemaphoreCreateBinary();
+    sniff_sem  = xSemaphoreCreateBinary();
     applog("boot: JMGO beamer-remote v%s", FW_VERSION);
     esp_err_t rc = nvs_flash_init();
     if (rc == ESP_ERR_NVS_NO_FREE_PAGES || rc == ESP_ERR_NVS_NEW_VERSION_FOUND) {
