@@ -579,9 +579,10 @@ static void wifi_init(void)
 /* ---- HTTP server ---- */
 static const char INDEX_HTML[] =
 "<!doctype html><html><head><meta charset=utf-8>"
-"<meta name=viewport content='width=device-width,initial-scale=1'>"
+"<meta name=viewport content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'>"
 "<title>ESP32 Remote</title><style>"
 "body{font-family:system-ui,sans-serif;background:#111;color:#eee;max-width:560px;margin:.4em auto;padding:0 1em;overscroll-behavior:none}"
+"*{touch-action:manipulation}"
 "h1{font-size:1.1em;margin:.3em 0}button{font-size:1.1em;padding:.7em 1.5em;margin:.3em .3em 0 0;border:0;border-radius:10px;cursor:pointer;transition:background .08s,transform .08s}"
 ".on{background:#2e7d32;color:#fff}.off{background:#555;color:#fff}.k{background:#37474f;color:#fff}.ok{background:#1565c0;color:#fff}"
 "button:active{background:#ffb300;color:#111;transform:translateY(1px)}"
