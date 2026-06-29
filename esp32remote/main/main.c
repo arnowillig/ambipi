@@ -44,6 +44,8 @@
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
 #include "host/ble_hs.h"
+#include "host/ble_hs_adv.h"
+#include "host/ble_store.h"
 #include "host/util/util.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
@@ -71,6 +73,7 @@ static uint16_t report_val_handle;       /* consumer-control report (ID 1) */
 static uint16_t report_val_handle_kbd;   /* keyboard report (ID 2)         */
 static volatile bool secured     = false;
 static volatile bool want_wake   = false;
+static volatile bool hid_enabled = true;
 static uint32_t wake_ms          = 0;
 
 /* JMGO vendor GATT service used by the official app for Menu/Settings/Input.
@@ -99,6 +102,14 @@ static volatile uint16_t sniff_conn  = BLE_HS_CONN_HANDLE_NONE;
 static volatile bool     sniff_on    = false;
 static uint16_t          sniff_hid_s = 0, sniff_hid_e = 0;
 static SemaphoreHandle_t sniff_sem;
+static volatile bool     sniff_seen_remote = false;
+#define SNIFF_MAX_CHRS 16
+#define SNIFF_MAX_REFS 8
+struct sniff_chr_info { uint16_t def_handle, val_handle; uint16_t uuid16; uint8_t props; };
+static struct sniff_chr_info sniff_chrs[SNIFF_MAX_CHRS];
+static int sniff_chr_count;
+static uint16_t sniff_ref_handles[SNIFF_MAX_REFS];
+static int sniff_ref_count;
 
 /* Captured from the ORIGINAL JMGO remote's wake advertisement (sniffed):
  *   Company: MediaTek (0x0046)
@@ -147,31 +158,35 @@ static void applog(const char *fmt, ...)
 }
 
 static void advertise(bool directed);
+static void no_cache(httpd_req_t *r)
+{
+    httpd_resp_set_hdr(r, "Cache-Control", "no-store, max-age=0");
+}
 
 /* ---- HID report map ----
- * Report ID 1: Consumer Control — one 16-bit Usage code (0 = release).
+ * Report ID 2: Consumer Control — one 32-bit Usage code (0 = release).
  *   Power 0x0030, Menu 0x0040, Vol+ 0x00E9, Vol- 0x00EA, Mute 0x00E2,
  *   Home (AC Home) 0x0223, Back (AC Back) 0x0224, Settings (AL CtrlPanel) 0x0183.
- * Report ID 2: Keyboard — for D-pad (arrows) + OK (Enter). 8-byte report. */
+ * Report ID 1: Keyboard/App shortcuts — 8-byte report. */
 static const uint8_t hid_report_map[] = {
-    /* --- Report ID 1: Consumer Control --- */
+    /* --- Report ID 2: Consumer Control --- */
     0x05, 0x0C,             /* Usage Page (Consumer)              */
     0x09, 0x01,             /* Usage (Consumer Control)           */
     0xA1, 0x01,             /* Collection (Application)           */
-    0x85, 0x01,             /*   Report ID (1)                    */
+    0x85, 0x02,             /*   Report ID (2)                    */
     0x15, 0x00,             /*   Logical Minimum (0)              */
     0x26, 0xFF, 0x03,       /*   Logical Maximum (0x03FF)         */
     0x19, 0x00,             /*   Usage Minimum (0)               */
     0x2A, 0xFF, 0x03,       /*   Usage Maximum (0x03FF)          */
-    0x75, 0x10,             /*   Report Size (16)                 */
+    0x75, 0x20,             /*   Report Size (32)                 */
     0x95, 0x01,             /*   Report Count (1)                 */
     0x81, 0x00,             /*   Input (Data, Array)              */
     0xC0,                   /* End Collection                     */
-    /* --- Report ID 2: Keyboard --- */
+    /* --- Report ID 1: Keyboard --- */
     0x05, 0x01,             /* Usage Page (Generic Desktop)       */
     0x09, 0x06,             /* Usage (Keyboard)                   */
     0xA1, 0x01,             /* Collection (Application)           */
-    0x85, 0x02,             /*   Report ID (2)                    */
+    0x85, 0x01,             /*   Report ID (1)                    */
     0x05, 0x07,             /*   Usage Page (Keyboard)            */
     0x19, 0xE0, 0x29, 0xE7, /*   Usage Min/Max (modifiers)        */
     0x15, 0x00, 0x25, 0x01, 0x75, 0x01, 0x95, 0x08, 0x81, 0x02,  /* 8 modifier bits */
@@ -184,9 +199,9 @@ static const uint8_t hid_report_map[] = {
 };
 
 static const uint8_t hid_info[]   = { 0x11, 0x01, 0x00, 0x02 }; /* bcdHID 1.11, country 0, flags: RemoteWake */
-static const uint8_t pnp_id[]     = { 0x02, 0x6B, 0x1D, 0x46, 0x02, 0x01, 0x00 }; /* USB, VID 1D6B, PID 0246, v1 */
-static const uint8_t report_ref_cc[]  = { 0x01, 0x01 };        /* Report ID 1 (consumer), Input */
-static const uint8_t report_ref_kbd[] = { 0x02, 0x01 };        /* Report ID 2 (keyboard), Input */
+static const uint8_t pnp_id[]     = { 0x01, 0x5A, 0x1D, 0x81, 0xE0, 0x02, 0x00 }; /* BT, VID 1D5A, PID E081, v2 */
+static const uint8_t report_ref_cc[]  = { 0x02, 0x01 };        /* Report ID 2 (consumer), Input */
+static const uint8_t report_ref_kbd[] = { 0x01, 0x01 };        /* Report ID 1 (keyboard), Input */
 static uint8_t protocol_mode      = 0x01;                      /* Report Protocol */
 
 struct ro_val { const uint8_t *p; uint16_t len; };
@@ -206,7 +221,7 @@ static int chr_read_ro(uint16_t c, uint16_t a, struct ble_gatt_access_ctxt *ctxt
 static int chr_report(uint16_t c, uint16_t a, struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
     if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
-        int len = (int)(intptr_t)arg;    /* report length: 2 (consumer) or 8 (keyboard) */
+        int len = (int)(intptr_t)arg;    /* report length: 4 (consumer) or 8 (keyboard) */
         uint8_t z[8] = {0};              /* current state = no key */
         return os_mbuf_append(ctxt->om, z, len) == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
     }
@@ -246,7 +261,7 @@ static const struct ble_gatt_svc_def gatt_svcs[] = {
               .flags = BLE_GATT_CHR_F_WRITE_NO_RSP },
             { .uuid = BLE_UUID16_DECLARE(0x2A4E), .access_cb = chr_proto_mode,
               .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE_NO_RSP },
-            { .uuid = BLE_UUID16_DECLARE(0x2A4D), .access_cb = chr_report, .arg = (void *)(intptr_t)2,
+            { .uuid = BLE_UUID16_DECLARE(0x2A4D), .access_cb = chr_report, .arg = (void *)(intptr_t)4,
               .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_ENC | BLE_GATT_CHR_F_NOTIFY,
               .val_handle = &report_val_handle,
               .descriptors = (struct ble_gatt_dsc_def[]) {
@@ -275,29 +290,32 @@ static const struct ble_gatt_svc_def gatt_svcs[] = {
     { 0 }
 };
 
-/* ---- send a Consumer-Control bit (press + release); bits per hid_report_map:
- * 0x01 Power, 0x02 Menu, 0x04 Vol+, 0x08 Vol-, 0x10 Mute, 0x20 Play/Pause ---- */
+/* ---- send a Consumer-Control usage (press + release), matching the original
+ * JMGO remote's 4-byte consumer report. ---- */
 static void send_cc(uint16_t usage, const char *name)   /* Consumer Control (report 1) */
 {
     if (conn_handle == BLE_HS_CONN_HANDLE_NONE) { applog("%s: not connected", name); return; }
-    applog("send: %s", name);
-    uint8_t down[2] = { (uint8_t)(usage & 0xFF), (uint8_t)(usage >> 8) }, up[2] = { 0, 0 };
-    struct os_mbuf *om = ble_hs_mbuf_from_flat(down, 2);
-    ble_gatts_notify_custom(conn_handle, report_val_handle, om);
-    vTaskDelay(pdMS_TO_TICKS(40));
-    om = ble_hs_mbuf_from_flat(up, 2);
-    ble_gatts_notify_custom(conn_handle, report_val_handle, om);
+    uint8_t down[4] = { (uint8_t)(usage & 0xFF), (uint8_t)(usage >> 8), 0, 0 }, up[4] = { 0 };
+    applog("send: %s cc data=%02x%02x%02x%02x", name, down[0], down[1], down[2], down[3]);
+    struct os_mbuf *om = ble_hs_mbuf_from_flat(down, 4);
+    int rc1 = ble_gatts_notify_custom(conn_handle, report_val_handle, om);
+    vTaskDelay(pdMS_TO_TICKS(120));
+    om = ble_hs_mbuf_from_flat(up, 4);
+    int rc2 = ble_gatts_notify_custom(conn_handle, report_val_handle, om);
+    if (rc1 || rc2) applog("%s: notify rc down=%d up=%d", name, rc1, rc2);
 }
 static void send_key(uint8_t key, const char *name)     /* Keyboard usage (report 2) */
 {
     if (conn_handle == BLE_HS_CONN_HANDLE_NONE) { applog("%s: not connected", name); return; }
-    applog("send: %s", name);
     uint8_t down[8] = { 0, 0, key, 0, 0, 0, 0, 0 }, up[8] = { 0 };
+    applog("send: %s key data=%02x%02x%02x%02x%02x%02x%02x%02x",
+           name, down[0], down[1], down[2], down[3], down[4], down[5], down[6], down[7]);
     struct os_mbuf *om = ble_hs_mbuf_from_flat(down, 8);
-    ble_gatts_notify_custom(conn_handle, report_val_handle_kbd, om);
-    vTaskDelay(pdMS_TO_TICKS(40));
+    int rc1 = ble_gatts_notify_custom(conn_handle, report_val_handle_kbd, om);
+    vTaskDelay(pdMS_TO_TICKS(120));
     om = ble_hs_mbuf_from_flat(up, 8);
-    ble_gatts_notify_custom(conn_handle, report_val_handle_kbd, om);
+    int rc2 = ble_gatts_notify_custom(conn_handle, report_val_handle_kbd, om);
+    if (rc1 || rc2) applog("%s: notify rc down=%d up=%d", name, rc1, rc2);
 }
 static void send_power(void) { send_cc(0x0030, "Power"); }
 
@@ -313,7 +331,7 @@ static int gap_event(struct ble_gap_event *event, void *arg)
             applog("CONNECTED (handle %d)", conn_handle);
         } else {
             ESP_LOGW(TAG, "connect failed (status %d), re-advertise", event->connect.status);
-            advertise(false);
+            if (hid_enabled && !sniff_on) advertise(false);
         }
         return 0;
 
@@ -321,18 +339,18 @@ static int gap_event(struct ble_gap_event *event, void *arg)
         applog("disconnected (reason 0x%x)", event->disconnect.reason);
         conn_handle = BLE_HS_CONN_HANDLE_NONE;
         secured = false;
-        if (!vendor_busy) advertise(false);
+        if (hid_enabled && !vendor_busy && !sniff_on) advertise(false);
         return 0;
 
     case BLE_GAP_EVENT_ENC_CHANGE:
-        ESP_LOGI(TAG, "encryption change, status %d", event->enc_change.status);
+        applog("encryption change status=%d", event->enc_change.status);
         if (event->enc_change.status == 0) secured = true;
         return 0;
 
     case BLE_GAP_EVENT_ADV_COMPLETE:
         /* directed high-duty adv timed out -> fall back to undirected */
         ESP_LOGI(TAG, "adv complete (reason %d) -> undirected", event->adv_complete.reason);
-        advertise(false);
+        if (hid_enabled && !sniff_on) advertise(false);
         return 0;
 
     case BLE_GAP_EVENT_PASSKEY_ACTION:
@@ -352,7 +370,7 @@ static int gap_event(struct ble_gap_event *event, void *arg)
     }
 
     case BLE_GAP_EVENT_SUBSCRIBE:
-        ESP_LOGI(TAG, "subscribe: attr %d notify=%d", event->subscribe.attr_handle, event->subscribe.cur_notify);
+        applog("subscribe: attr 0x%04x notify=%d", event->subscribe.attr_handle, event->subscribe.cur_notify);
         return 0;
 
     default:
@@ -364,6 +382,10 @@ static int gap_event(struct ble_gap_event *event, void *arg)
 static void advertise(bool directed)
 {
     ble_gap_adv_stop();
+    if (!hid_enabled || sniff_on) {
+        ESP_LOGI(TAG, "adv: disabled");
+        return;
+    }
     struct ble_gap_adv_params adv = { 0 };
 
     if (directed) {
@@ -403,6 +425,15 @@ static void advertise(bool directed)
 static void advertise_wake(void)
 {
     ble_gap_adv_stop();
+    if (sniff_on) {
+        applog("wake: stopping sniffer");
+        sniff_on = false;
+        if (sniff_conn != BLE_HS_CONN_HANDLE_NONE) {
+            ble_gap_terminate(sniff_conn, 0x13);
+            vTaskDelay(pdMS_TO_TICKS(250));
+        }
+    }
+    hid_enabled = true;
     applog("adv: WAKE replica (MediaTek mfg + beamer addr)");
 
     struct ble_hs_adv_fields f = { 0 };
@@ -415,13 +446,13 @@ static void advertise_wake(void)
     f.mfg_data = (uint8_t *)WAKE_MFG;
     f.mfg_data_len = sizeof(WAKE_MFG);
     int rc = ble_gap_adv_set_fields(&f);
-    if (rc) ESP_LOGW(TAG, "wake set_fields rc=%d", rc);
+    if (rc) applog("wake set_fields rc=%d", rc);
 
     struct ble_gap_adv_params adv = { 0 };
     adv.conn_mode = BLE_GAP_CONN_MODE_UND;
     adv.disc_mode = BLE_GAP_DISC_MODE_LTD;
     rc = ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER, &adv, gap_event, NULL);
-    ESP_LOGI(TAG, "adv: WAKE rc=%d", rc);
+    applog("adv: WAKE rc=%d", rc);
 }
 
 static void on_sync(void)
@@ -555,12 +586,13 @@ static const char INDEX_HTML[] =
 ".on{background:#2e7d32;color:#fff}.off{background:#555;color:#fff}.k{background:#37474f;color:#fff}.ok{background:#1565c0;color:#fff}"
 ".box{background:#1b1b1b;border:1px solid #333;border-radius:14px;padding:.8em .6em;margin:.8em 0;text-align:center}"
 ".row{margin-top:.4em}.dpad{display:inline-grid;grid-template-columns:repeat(3,66px);grid-template-areas:'. up .' 'lt ok rt' '. dn .';gap:.3em;margin:.6em auto}.dpad button{margin:0;width:66px;padding:.6em 0}"
-"#log{margin-top:1em;background:#000;color:#3f6;font:12px/1.4 monospace;padding:.6em;border-radius:10px;height:320px;overflow:auto;white-space:pre-wrap}"
+".logbox{position:relative;margin-top:1em}.logtools{position:absolute;top:.45em;right:.45em;display:flex;gap:.35em}.logtools button{margin:0;padding:.25em .5em;font-size:.9em;background:#222;color:#ccc;border:1px solid #444;border-radius:6px}"
+"#log{background:#000;color:#3f6;font:12px/1.4 monospace;padding:.6em 5.4em .6em .6em;border-radius:10px;height:320px;overflow:auto;white-space:pre-wrap}"
 "</style></head><body>"
 "<h1>ESP32 Remote <small style='opacity:.55;font-size:.6em'>v" FW_VERSION "</small></h1>"
 "<div id=st style='font-weight:bold;margin:.2em 0;color:#888'>\xE2\x80\xA6</div>"
 "<div class=box>"
-"<div class=row><button class=on onclick=\"go('on')\">Ein</button><button class=off onclick=\"go('off')\">Aus</button></div>"
+"<div class=row><button class=on onclick=\"go('on')\">On</button><button class=off onclick=\"go('off')\">Off</button></div>"
 "<div class=dpad>"
 "<button class=k style='grid-area:up' onclick=\"go('up')\">\xE2\x96\xB2</button>"
 "<button class=k style='grid-area:lt' onclick=\"go('left')\">\xE2\x97\x80</button>"
@@ -570,29 +602,40 @@ static const char INDEX_HTML[] =
 "</div>"
 "<div class=row><button class=k onclick=\"go('back')\">\xE2\x86\x90 Back</button><button class=k onclick=\"go('home')\">\xE2\x8C\x82 Home</button></div>"
 "<div class=row><button class=k onclick=\"go('menu')\">\xE2\x98\xB0 Menu</button><button class=k onclick=\"go('settings')\">\xE2\x9A\x99 Settings</button></div>"
-"<div class=row><button class=k onclick=\"go('input')\">\xE2\x87\xA5 Input / HDMI</button></div>"
+"<div class=row><button class=k onclick=\"go('input')\">\xE2\x87\xA5 Input</button><button class=k onclick=\"go('youtube')\">YouTube</button></div>"
+"<div class=row><button class=k onclick=\"go('netflix')\">Netflix</button><button class=k onclick=\"go('prime')\">Prime Video</button></div>"
 "<div class=row><button class=k onclick=\"go('voldown')\">Vol \xE2\x88\x92</button><button class=k onclick=\"go('mute')\">Mute</button><button class=k onclick=\"go('volup')\">Vol +</button></div>"
+"</div>"
+"<div class=box style='margin-top:.6em'>"
+"<div style='opacity:.6;font-size:.85em;margin-bottom:.4em'>BT Client</div>"
+"<div class=row><button class=on onclick=\"go2('hid/on')\">BT Client On</button><button class=off onclick=\"go2('hid/off')\">BT Client Off</button></div>"
+"<div class=row><button class=off style='font-size:.9em;padding:.45em .9em' onclick=\"if(confirm('Clear ESP32 Bluetooth bonds and reboot?'))go2('bt/clear')\">Clear BT Bonds</button></div>"
 "</div>"
 "<div class=box style='margin-top:.6em'>"
 "<div style='opacity:.6;font-size:.85em;margin-bottom:.4em'>HID Sniffer (original remote)</div>"
 "<div class=row><button class=k onclick=\"go2('sniff/start')\">Sniff Start</button><button class=off onclick=\"go2('sniff/stop')\">Sniff Stop</button></div>"
 "</div>"
-"<p style='opacity:.45;font-size:.8em'>Firmware-Update per <code>make push</code> (OTA) &nbsp;|&nbsp; <button class=off style='font-size:.8em;padding:.3em .8em' onclick=\"if(confirm('ESP32 neu starten?'))fetch('/api/reboot')\">Reboot</button></p>"
-"<div id=log>...</div>"
+"<p style='opacity:.45;font-size:.8em'>Firmware-Update per <code>make push</code> (OTA) &nbsp;|&nbsp; <button class=off style='font-size:.8em;padding:.3em .8em' onclick=\"if(confirm('ESP32 neu starten?'))go2('reboot')\">Reboot</button></p>"
+"<div class=logbox><div class=logtools><button onclick=\"copyLog()\" title=\"Copy log\" aria-label=\"Copy log\">&#x29C9;</button><button onclick=\"clearLog()\" title=\"Clear log\" aria-label=\"Clear log\">&#x2715;</button></div><div id=log>...</div></div>"
 "<script>"
-"function go(k){fetch('/api/beamer/'+k).then(r=>r.text()).then(_=>setTimeout(load,400));}"
-"function go2(k){fetch('/api/'+k).then(r=>r.text()).then(_=>setTimeout(load,800));}"
-"function load(){fetch('/log').then(r=>r.text()).then(t=>{var l=document.getElementById('log');l.textContent=t;l.scrollTop=l.scrollHeight;});}"
-"function ps(){fetch('/api/status').then(r=>r.json()).then(j=>{var e=document.getElementById('st');e.textContent=j.connected?'\xE2\x97\x8F Connected':'\xE2\x97\x8B Disconnected';e.style.color=j.connected?'#3f6':'#f66';}).catch(_=>{});}"
+"function req(u){return fetch(u,{cache:'no-store'});}"
+"function go(k){req('/api/beamer/'+k).then(r=>r.text()).then(_=>setTimeout(load,400));}"
+"function go2(k){req('/api/'+k).then(r=>r.text()).then(_=>setTimeout(load,800));}"
+"function load(){req('/log').then(r=>r.text()).then(t=>{var l=document.getElementById('log');l.textContent=t;l.scrollTop=l.scrollHeight;});}"
+"function copyLog(){var t=document.getElementById('log').textContent;if(navigator.clipboard){navigator.clipboard.writeText(t);return;}var a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();document.execCommand('copy');a.remove();}"
+"function clearLog(){req('/api/log/clear').then(_=>load());}"
+"function ps(){req('/api/status').then(r=>r.json()).then(j=>{var e=document.getElementById('st');e.textContent=(j.connected?'\xE2\x97\x8F Connected':'\xE2\x97\x8B Disconnected')+(j.hid?'':' / BT Client off');e.style.color=j.connected?'#3f6':'#f66';}).catch(_=>{});}"
 "setInterval(load,2000);setInterval(ps,2000);load();ps();"
 "</script></body></html>";
 
-static esp_err_t h_root(httpd_req_t *r){ httpd_resp_set_type(r,"text/html"); return httpd_resp_send(r, INDEX_HTML, HTTPD_RESP_USE_STRLEN); }
+static esp_err_t h_root(httpd_req_t *r){ no_cache(r); httpd_resp_set_type(r,"text/html"); return httpd_resp_send(r, INDEX_HTML, HTTPD_RESP_USE_STRLEN); }
 static esp_err_t h_status(httpd_req_t *r)
 {
-    char buf[96];
-    int n = snprintf(buf, sizeof buf, "{\"connected\":%s,\"version\":\"%s\"}\n",
-                     conn_handle != BLE_HS_CONN_HANDLE_NONE ? "true" : "false", FW_VERSION);
+    char buf[128];
+    int n = snprintf(buf, sizeof buf, "{\"connected\":%s,\"hid\":%s,\"version\":\"%s\"}\n",
+                     conn_handle != BLE_HS_CONN_HANDLE_NONE ? "true" : "false",
+                     hid_enabled ? "true" : "false", FW_VERSION);
+    no_cache(r);
     httpd_resp_set_type(r, "application/json");
     return httpd_resp_send(r, buf, n);
 }
@@ -725,14 +768,102 @@ static int sniff_svc_cb(uint16_t ch, const struct ble_gatt_error *err,
     else if (err->status == BLE_HS_EDONE) xSemaphoreGive(sniff_sem);
     return 0;
 }
+
+static uint16_t uuid16_or_zero(const ble_uuid_any_t *uuid)
+{
+    return uuid->u.type == BLE_UUID_TYPE_16 ? uuid->u16.value : 0;
+}
+
+static void hex_from_mbuf(struct os_mbuf *m, char *hex, size_t hex_len)
+{
+    int pos = 0;
+    for (struct os_mbuf *om = m; om && pos < (int)hex_len - 3; om = SLIST_NEXT(om, om_next)) {
+        for (uint16_t i = 0; i < om->om_len && pos < (int)hex_len - 3; i++)
+            pos += snprintf(hex + pos, 3, "%02x", om->om_data[i]);
+    }
+    hex[pos] = 0;
+}
+
+static bool addr_eq(const ble_addr_t *a, const ble_addr_t *b)
+{
+    return a->type == b->type && memcmp(a->val, b->val, sizeof a->val) == 0;
+}
+
+static void addr_to_str(const ble_addr_t *addr, char *out, size_t out_len)
+{
+    snprintf(out, out_len, "%02X:%02X:%02X:%02X:%02X:%02X/%u",
+             addr->val[5], addr->val[4], addr->val[3],
+             addr->val[2], addr->val[1], addr->val[0], addr->type);
+}
+
+static bool adv_has_uuid16(const struct ble_hs_adv_fields *f, uint16_t uuid)
+{
+    for (uint8_t i = 0; i < f->num_uuids16; i++)
+        if (f->uuids16[i].value == uuid) return true;
+    return false;
+}
+
+static bool adv_name_contains(const struct ble_hs_adv_fields *f, const char *needle)
+{
+    size_t nl = strlen(needle);
+    if (!f->name || f->name_len < nl) return false;
+    for (uint8_t i = 0; i + nl <= f->name_len; i++)
+        if (!strncasecmp((const char *)f->name + i, needle, nl)) return true;
+    return false;
+}
+
+static int sniff_read_cb(uint16_t ch, const struct ble_gatt_error *err,
+                         struct ble_gatt_attr *attr, void *arg)
+{
+    uint16_t h = (uint16_t)(uintptr_t)arg;
+    if (err->status == 0 && attr && attr->om) {
+        char hex[160];
+        hex_from_mbuf(attr->om, hex, sizeof hex);
+        applog("sniff: read h=0x%04x off=%u data=%s", h, attr->offset, hex);
+    } else if (err->status != BLE_HS_EDONE) {
+        applog("sniff: read h=0x%04x status=%d", h, err->status);
+    }
+    if (err->status == BLE_HS_EDONE) xSemaphoreGive(sniff_sem);
+    return 0;
+}
+
+static int sniff_dsc_cb(uint16_t ch, const struct ble_gatt_error *err,
+                        uint16_t chr_val_handle, const struct ble_gatt_dsc *dsc,
+                        void *arg)
+{
+    if (err->status == 0 && dsc) {
+        uint16_t u16 = uuid16_or_zero(&dsc->uuid);
+        applog("sniff: dsc chr=0x%04x h=0x%04x uuid=0x%04x",
+               chr_val_handle, dsc->handle, u16);
+        if (u16 == 0x2908 && sniff_ref_count < SNIFF_MAX_REFS)
+            sniff_ref_handles[sniff_ref_count++] = dsc->handle;
+    } else if (err->status == BLE_HS_EDONE) {
+        xSemaphoreGive(sniff_sem);
+    }
+    return 0;
+}
+
 static int sniff_chr_cb(uint16_t ch, const struct ble_gatt_error *err,
                          const struct ble_gatt_chr *chr, void *arg)
 {
-    if (err->status == 0 && chr && (chr->properties & BLE_GATT_CHR_PROP_NOTIFY)) {
-        uint16_t ccc = chr->val_handle + 1;
-        uint16_t val = 0x0100;
-        ble_gattc_write_flat(ch, ccc, &val, 2, NULL, NULL);
-        applog("sniff: subscribed chr=0x%04x CCC=0x%04x", chr->val_handle, ccc);
+    if (err->status == 0 && chr) {
+        uint16_t u16 = uuid16_or_zero(&chr->uuid);
+        if (sniff_chr_count < SNIFF_MAX_CHRS) {
+            sniff_chrs[sniff_chr_count++] = (struct sniff_chr_info) {
+                .def_handle = chr->def_handle,
+                .val_handle = chr->val_handle,
+                .uuid16 = u16,
+                .props = chr->properties,
+            };
+        }
+        applog("sniff: chr def=0x%04x val=0x%04x uuid=0x%04x props=0x%02x",
+               chr->def_handle, chr->val_handle, u16, chr->properties);
+        if (chr->properties & BLE_GATT_CHR_PROP_NOTIFY) {
+            uint16_t ccc = chr->val_handle + 1;
+            uint16_t val = 0x0100;
+            ble_gattc_write_flat(ch, ccc, &val, 2, NULL, NULL);
+            applog("sniff: subscribed chr=0x%04x CCC=0x%04x", chr->val_handle, ccc);
+        }
     } else if (err->status == BLE_HS_EDONE) {
         xSemaphoreGive(sniff_sem);
     }
@@ -744,13 +875,57 @@ static int sniff_gap_cb(struct ble_gap_event *event, void *arg)
     case BLE_GAP_EVENT_CONNECT:
         sniff_conn = (event->connect.status == 0) ? event->connect.conn_handle
                                                    : BLE_HS_CONN_HANDLE_NONE;
-        if (event->connect.status != 0) applog("sniff: connect failed status=%d", event->connect.status);
+        if (event->connect.status == 0)
+            applog("sniff: connected handle=%d", sniff_conn);
+        else
+            applog("sniff: connect failed status=%d", event->connect.status);
         xSemaphoreGive(sniff_sem);
         return 0;
     case BLE_GAP_EVENT_DISCONNECT:
-        applog("sniff: disconnected");
+        applog("sniff: disconnected reason=0x%x", event->disconnect.reason);
         sniff_conn = BLE_HS_CONN_HANDLE_NONE;
         sniff_on = false;
+        xSemaphoreGive(sniff_sem);
+        return 0;
+    case BLE_GAP_EVENT_DISC:
+        {
+            struct ble_hs_adv_fields fields;
+            memset(&fields, 0, sizeof fields);
+            ble_hs_adv_parse_fields(&fields, event->disc.data, event->disc.length_data);
+            bool exact = addr_eq(&event->disc.addr, &REMOTE_ADDR);
+            bool hid = adv_has_uuid16(&fields, 0x1812);
+            bool interesting = exact || hid || adv_name_contains(&fields, "JMGO") ||
+                               adv_name_contains(&fields, "Remote") ||
+                               (fields.appearance_is_present &&
+                                (fields.appearance == 0x0180 || fields.appearance == 0x03C1));
+            if (!interesting) return 0;
+
+            char hex[80]; int pos = 0;
+            for (uint8_t i = 0; i < event->disc.length_data && pos < (int)sizeof hex - 3; i++)
+                pos += snprintf(hex + pos, 3, "%02x", event->disc.data[i]);
+            hex[pos] = 0;
+            char addr[32];
+            addr_to_str(&event->disc.addr, addr, sizeof addr);
+            char name[28] = "";
+            if (fields.name && fields.name_len) {
+                size_t n = fields.name_len < sizeof name - 1 ? fields.name_len : sizeof name - 1;
+                memcpy(name, fields.name, n);
+                name[n] = 0;
+            }
+            applog("sniff: adv addr=%s type=%u rssi=%d name='%s' hid=%d app=0x%04x data=%s",
+                   addr, event->disc.event_type, event->disc.rssi, name, hid ? 1 : 0,
+                   fields.appearance_is_present ? fields.appearance : 0, hex);
+            if (exact) {
+                sniff_seen_remote = true;
+                ble_gap_disc_cancel();
+                xSemaphoreGive(sniff_sem);
+            }
+        }
+        return 0;
+    case BLE_GAP_EVENT_DISC_COMPLETE:
+        applog("sniff: scan complete reason=%d seen=%d",
+               event->disc_complete.reason, sniff_seen_remote ? 1 : 0);
+        xSemaphoreGive(sniff_sem);
         return 0;
     case BLE_GAP_EVENT_ENC_CHANGE:
         applog("sniff: encryption status=%d", event->enc_change.status);
@@ -764,11 +939,8 @@ static int sniff_gap_cb(struct ble_gap_event *event, void *arg)
         return 0;
     case BLE_GAP_EVENT_NOTIFY_RX:
         if (event->notify_rx.conn_handle == sniff_conn) {
-            struct os_mbuf *m = event->notify_rx.om;
-            char hex[64]; int pos = 0;
-            for (uint16_t i = 0; i < m->om_len && pos < (int)sizeof(hex) - 3; i++)
-                pos += snprintf(hex + pos, 3, "%02x", m->om_data[i]);
-            hex[pos] = 0;
+            char hex[64];
+            hex_from_mbuf(event->notify_rx.om, hex, sizeof hex);
             applog("sniff: attr=0x%04x data=%s", event->notify_rx.attr_handle, hex);
         }
         return 0;
@@ -779,7 +951,30 @@ static void sniff_task(void *arg)
 {
     sniff_on = true;
     sniff_conn = BLE_HS_CONN_HANDLE_NONE;
+    sniff_chr_count = 0;
+    sniff_ref_count = 0;
+    sniff_seen_remote = false;
     xSemaphoreTake(sniff_sem, 0);
+
+    int del_rc = ble_store_util_delete_peer(&REMOTE_ADDR);
+    applog("sniff: delete original-remote bond rc=%d", del_rc);
+
+    applog("sniff: scanning for original remote...");
+    struct ble_gap_disc_params dp = { 0 };
+    dp.itvl = BLE_GAP_SCAN_FAST_INTERVAL_MIN;
+    dp.window = BLE_GAP_SCAN_FAST_WINDOW;
+    dp.passive = 0;
+    dp.filter_duplicates = 0;
+    int scan_rc = ble_gap_disc(own_addr_type, 8000, &dp, sniff_gap_cb, NULL);
+    if (scan_rc != 0) {
+        applog("sniff: scan rc=%d", scan_rc);
+    } else {
+        xSemaphoreTake(sniff_sem, pdMS_TO_TICKS(9000));
+        if (ble_gap_disc_active()) {
+            ble_gap_disc_cancel();
+            vTaskDelay(pdMS_TO_TICKS(120));
+        }
+    }
 
     applog("sniff: connecting to original remote F4:22:7A:76:93:FA...");
     struct ble_gap_conn_params cp = {
@@ -813,6 +1008,34 @@ static void sniff_task(void *arg)
     if (xSemaphoreTake(sniff_sem, pdMS_TO_TICKS(5000)) != pdTRUE)
         { applog("sniff: char discovery timeout"); goto done; }
 
+    for (int i = 0; i < sniff_chr_count; i++) {
+        if (sniff_chrs[i].uuid16 == 0x2A4B) {
+            applog("sniff: reading HID report map h=0x%04x", sniff_chrs[i].val_handle);
+            xSemaphoreTake(sniff_sem, 0);
+            ble_gattc_read_long(sniff_conn, sniff_chrs[i].val_handle, 0, sniff_read_cb,
+                                (void *)(uintptr_t)sniff_chrs[i].val_handle);
+            xSemaphoreTake(sniff_sem, pdMS_TO_TICKS(5000));
+        }
+    }
+
+    for (int i = 0; i < sniff_chr_count; i++) {
+        uint16_t end = sniff_hid_e;
+        if (i + 1 < sniff_chr_count && sniff_chrs[i + 1].def_handle > sniff_chrs[i].val_handle)
+            end = sniff_chrs[i + 1].def_handle - 1;
+        if (end > sniff_chrs[i].val_handle) {
+            xSemaphoreTake(sniff_sem, 0);
+            ble_gattc_disc_all_dscs(sniff_conn, sniff_chrs[i].val_handle, end, sniff_dsc_cb, NULL);
+            xSemaphoreTake(sniff_sem, pdMS_TO_TICKS(3000));
+        }
+    }
+
+    for (int i = 0; i < sniff_ref_count; i++) {
+        xSemaphoreTake(sniff_sem, 0);
+        ble_gattc_read(sniff_conn, sniff_ref_handles[i], sniff_read_cb,
+                       (void *)(uintptr_t)sniff_ref_handles[i]);
+        xSemaphoreTake(sniff_sem, pdMS_TO_TICKS(3000));
+    }
+
     applog("sniff: ready — press buttons on original remote, watch /log");
     while (sniff_on) vTaskDelay(pdMS_TO_TICKS(100));
 
@@ -826,6 +1049,7 @@ done:
 }
 static esp_err_t h_sniff_start(httpd_req_t *r)
 {
+    no_cache(r);
     httpd_resp_set_type(r, "text/plain");
     if (sniff_on) return httpd_resp_sendstr(r, "already running\n");
     xTaskCreate(sniff_task, "sniff", 4096, NULL, 5, NULL);
@@ -833,28 +1057,32 @@ static esp_err_t h_sniff_start(httpd_req_t *r)
 }
 static esp_err_t h_sniff_stop(httpd_req_t *r)
 {
+    no_cache(r);
     httpd_resp_set_type(r, "text/plain");
     sniff_on = false;
     return httpd_resp_sendstr(r, "ok\n");
 }
 
 /* Key table: cc!=0 -> Consumer HID; key!=0 -> Keyboard HID.
- * menu/settings/input codes TBD — sniff original remote (F4:22:7A:76:93:FA) for exact codes. */
+ * Codes captured from the original remote F4:22:7A:76:93:FA. */
 static const struct { const char *act; uint16_t cc; uint8_t key; } KEYS[] = {
     { "power",    0x0030, 0    },
     { "volup",    0x00E9, 0    },
     { "voldown",  0x00EA, 0    },
     { "mute",     0x00E2, 0    },
-    { "menu",     0x0040, 0    },  /* Consumer Menu — confirmed working */
+    { "menu",     0x0040, 0    },
     { "home",     0x0223, 0    },
     { "back",     0x0224, 0    },
-    { "settings", 0x0183, 0    },  /* TBD — still searching */
-    { "input",    0x008D, 0    },  /* Consumer Media Select Home — opens input switcher */
-    { "up",    0, 0x52 },
-    { "down",  0, 0x51 },
-    { "left",  0, 0x50 },
-    { "right", 0, 0x4F },
-    { "ok",    0, 0x28 },
+    { "settings", 0x00BE, 0    },
+    { "left",     0x0044, 0    },
+    { "up",       0x0042, 0    },
+    { "right",    0x0045, 0    },
+    { "down",     0x0043, 0    },
+    { "ok",       0x0084, 0    },
+    { "input",    0, 0x1F },
+    { "youtube",  0, 0x20 },
+    { "netflix",  0, 0x21 },
+    { "prime",    0, 0x1E },
 };
 
 /* GET /api/beamer/<key> — on/off are special; rest map via KEYS. */
@@ -868,8 +1096,9 @@ static esp_err_t h_beamer(httpd_req_t *r)
     memcpy(act, src, n);
     act[n] = 0;
 
+    no_cache(r);
     httpd_resp_set_type(r, "text/plain");
-    if (!strcmp(act, "on"))  { beamer_on();  return httpd_resp_sendstr(r, "ok\n"); }
+    if (!strcmp(act, "on"))  { applog("http: /api/beamer/on"); beamer_on();  return httpd_resp_sendstr(r, "ok\n"); }
     if (!strcmp(act, "off")) { beamer_off(); return httpd_resp_sendstr(r, "ok\n"); }
     /* tuning: /api/beamer/cc?u=<hex> (consumer) or /api/beamer/key?k=<hex> (keyboard) */
     if (!strcmp(act, "cc"))  { const char *u = strstr(r->uri, "u="); send_cc((uint16_t)(u ? strtol(u + 2, NULL, 16) : 0), "cc"); return httpd_resp_sendstr(r, "ok\n"); }
@@ -887,6 +1116,7 @@ static esp_err_t h_beamer(httpd_req_t *r)
 }
 static esp_err_t h_log(httpd_req_t *r)
 {
+    no_cache(r);
     httpd_resp_set_type(r, "text/plain");
     esp_err_t e = ESP_OK;
     if (s_log_mtx && xSemaphoreTake(s_log_mtx, pdMS_TO_TICKS(100)) == pdTRUE) {
@@ -896,6 +1126,18 @@ static esp_err_t h_log(httpd_req_t *r)
         e = httpd_resp_sendstr(r, "");
     }
     return e;
+}
+
+static esp_err_t h_log_clear(httpd_req_t *r)
+{
+    no_cache(r);
+    if (s_log_mtx && xSemaphoreTake(s_log_mtx, pdMS_TO_TICKS(100)) == pdTRUE) {
+        s_log_len = 0;
+        s_log[0] = 0;
+        xSemaphoreGive(s_log_mtx);
+    }
+    httpd_resp_set_type(r, "text/plain");
+    return httpd_resp_sendstr(r, "ok\n");
 }
 
 /* ---- OTA firmware upload: POST /api/ota/upload (raw .bin body) ---- */
@@ -945,8 +1187,48 @@ static esp_err_t h_ota(httpd_req_t *r)
 
 static esp_err_t h_reboot(httpd_req_t *r)
 {
+    no_cache(r);
     httpd_resp_set_type(r, "text/plain");
     httpd_resp_sendstr(r, "rebooting\n");
+    xTaskCreate(reboot_task, "reboot", 2048, NULL, 5, NULL);
+    return ESP_OK;
+}
+
+static esp_err_t h_hid_on(httpd_req_t *r)
+{
+    no_cache(r);
+    hid_enabled = true;
+    applog("bt client: enabled");
+    if (!sniff_on && conn_handle == BLE_HS_CONN_HANDLE_NONE) advertise(false);
+    httpd_resp_set_type(r, "text/plain");
+    return httpd_resp_sendstr(r, "ok\n");
+}
+
+static esp_err_t h_hid_off(httpd_req_t *r)
+{
+    no_cache(r);
+    hid_enabled = false;
+    want_wake = false;
+    ble_gap_adv_stop();
+    if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
+        applog("bt client: disabled, disconnecting beamer");
+        ble_gap_terminate(conn_handle, 0x13);
+    } else {
+        applog("bt client: disabled");
+    }
+    httpd_resp_set_type(r, "text/plain");
+    return httpd_resp_sendstr(r, "ok\n");
+}
+
+static esp_err_t h_bt_clear(httpd_req_t *r)
+{
+    no_cache(r);
+    int rc = ble_store_clear();
+    applog("bt: clear bonds rc=%d, rebooting", rc);
+    if (conn_handle != BLE_HS_CONN_HANDLE_NONE)
+        ble_gap_terminate(conn_handle, 0x13);
+    httpd_resp_set_type(r, "text/plain");
+    httpd_resp_sendstr(r, "clearing bt bonds, rebooting\n");
     xTaskCreate(reboot_task, "reboot", 2048, NULL, 5, NULL);
     return ESP_OK;
 }
@@ -955,6 +1237,7 @@ static void http_start(void)
 {
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
     cfg.server_port = 80;
+    cfg.max_uri_handlers = 16;
     cfg.lru_purge_enable = true;
     cfg.recv_wait_timeout = 10;        /* generous for OTA upload */
     cfg.send_wait_timeout = 10;
@@ -964,9 +1247,13 @@ static void http_start(void)
     httpd_uri_t u;
     u = (httpd_uri_t){ .uri = "/",               .method = HTTP_GET,  .handler = h_root   }; httpd_register_uri_handler(s, &u);
     u = (httpd_uri_t){ .uri = "/log",            .method = HTTP_GET,  .handler = h_log    }; httpd_register_uri_handler(s, &u);
+    u = (httpd_uri_t){ .uri = "/api/log/clear",  .method = HTTP_GET,  .handler = h_log_clear }; httpd_register_uri_handler(s, &u);
     u = (httpd_uri_t){ .uri = "/api/status",     .method = HTTP_GET,  .handler = h_status }; httpd_register_uri_handler(s, &u);
     u = (httpd_uri_t){ .uri = "/api/ota/upload", .method = HTTP_POST, .handler = h_ota    }; httpd_register_uri_handler(s, &u);
     u = (httpd_uri_t){ .uri = "/api/reboot",      .method = HTTP_GET,  .handler = h_reboot      }; httpd_register_uri_handler(s, &u);
+    u = (httpd_uri_t){ .uri = "/api/bt/clear",    .method = HTTP_GET,  .handler = h_bt_clear    }; httpd_register_uri_handler(s, &u);
+    u = (httpd_uri_t){ .uri = "/api/hid/on",      .method = HTTP_GET,  .handler = h_hid_on      }; httpd_register_uri_handler(s, &u);
+    u = (httpd_uri_t){ .uri = "/api/hid/off",     .method = HTTP_GET,  .handler = h_hid_off     }; httpd_register_uri_handler(s, &u);
     u = (httpd_uri_t){ .uri = "/api/sniff/start",.method = HTTP_GET,  .handler = h_sniff_start }; httpd_register_uri_handler(s, &u);
     u = (httpd_uri_t){ .uri = "/api/sniff/stop", .method = HTTP_GET,  .handler = h_sniff_stop  }; httpd_register_uri_handler(s, &u);
     u = (httpd_uri_t){ .uri = "/api/beamer/*",   .method = HTTP_GET,  .handler = h_beamer      }; httpd_register_uri_handler(s, &u);
