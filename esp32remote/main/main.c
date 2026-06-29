@@ -602,6 +602,7 @@ static const char INDEX_HTML[] =
 "</div>"
 "<div class=row><button class=k onclick=\"go('back')\">\xE2\x86\x90 Back</button><button class=k onclick=\"go('home')\">\xE2\x8C\x82 Home</button></div>"
 "<div class=row><button class=k onclick=\"go('menu')\">\xE2\x98\xB0 Menu</button><button class=k onclick=\"go('settings')\">\xE2\x9A\x99 Settings</button></div>"
+"<div class=row><button class=k onclick=\"go('googletv')\">Google TV</button><button class=k onclick=\"go('hdmi')\">HDMI</button></div>"
 "<div class=row><button class=k onclick=\"go('input')\">\xE2\x87\xA5 Input</button><button class=k onclick=\"go('youtube')\">YouTube</button></div>"
 "<div class=row><button class=k onclick=\"go('netflix')\">Netflix</button><button class=k onclick=\"go('prime')\">Prime Video</button></div>"
 "<div class=row><button class=k onclick=\"go('voldown')\">Vol \xE2\x88\x92</button><button class=k onclick=\"go('mute')\">Mute</button><button class=k onclick=\"go('volup')\">Vol +</button></div>"
@@ -1085,6 +1086,30 @@ static const struct { const char *act; uint16_t cc; uint8_t key; } KEYS[] = {
     { "prime",    0, 0x1E },
 };
 
+static bool send_action(const char *act)
+{
+    for (size_t i = 0; i < sizeof KEYS / sizeof KEYS[0]; i++) {
+        if (!strcmp(act, KEYS[i].act)) {
+            if (KEYS[i].key) send_key(KEYS[i].key, act);
+            else             send_cc(KEYS[i].cc, act);
+            return true;
+        }
+    }
+    return false;
+}
+
+static void send_hdmi_macro(void)
+{
+    applog("macro: hdmi");
+    send_action("input");
+    vTaskDelay(pdMS_TO_TICKS(700));
+    send_action("up");
+    vTaskDelay(pdMS_TO_TICKS(250));
+    send_action("down");
+    vTaskDelay(pdMS_TO_TICKS(250));
+    send_action("ok");
+}
+
 /* GET /api/beamer/<key> — on/off are special; rest map via KEYS. */
 static esp_err_t h_beamer(httpd_req_t *r)
 {
@@ -1100,17 +1125,13 @@ static esp_err_t h_beamer(httpd_req_t *r)
     httpd_resp_set_type(r, "text/plain");
     if (!strcmp(act, "on"))  { applog("http: /api/beamer/on"); beamer_on();  return httpd_resp_sendstr(r, "ok\n"); }
     if (!strcmp(act, "off")) { beamer_off(); return httpd_resp_sendstr(r, "ok\n"); }
+    if (!strcmp(act, "googletv")) { send_action("home"); return httpd_resp_sendstr(r, "ok\n"); }
+    if (!strcmp(act, "hdmi")) { send_hdmi_macro(); return httpd_resp_sendstr(r, "ok\n"); }
     /* tuning: /api/beamer/cc?u=<hex> (consumer) or /api/beamer/key?k=<hex> (keyboard) */
     if (!strcmp(act, "cc"))  { const char *u = strstr(r->uri, "u="); send_cc((uint16_t)(u ? strtol(u + 2, NULL, 16) : 0), "cc"); return httpd_resp_sendstr(r, "ok\n"); }
     if (!strcmp(act, "key")) { const char *u = strstr(r->uri, "k="); send_key((uint8_t)(u ? strtol(u + 2, NULL, 16) : 0), "key"); return httpd_resp_sendstr(r, "ok\n"); }
     if (!strcmp(act, "vkey")) { const char *u = strstr(r->uri, "k="); send_vendor_key((int)(u ? strtol(u + 2, NULL, 0) : 0), "vkey"); return httpd_resp_sendstr(r, "ok\n"); }
-    for (size_t i = 0; i < sizeof KEYS / sizeof KEYS[0]; i++) {
-        if (!strcmp(act, KEYS[i].act)) {
-            if (KEYS[i].key) send_key(KEYS[i].key, act);
-            else             send_cc(KEYS[i].cc, act);
-            return httpd_resp_sendstr(r, "ok\n");
-        }
-    }
+    if (send_action(act)) return httpd_resp_sendstr(r, "ok\n");
     httpd_resp_send_err(r, HTTPD_404_NOT_FOUND, "unknown key\n");
     return ESP_FAIL;
 }
