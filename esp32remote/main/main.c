@@ -631,7 +631,6 @@ static const char INDEX_HTML[] =
 "</div>"
 "<div class=logbox id=logbox><div class=logtools><button onclick=\"toggleLog()\" id=mintog title=\"Minimize log\" aria-label=\"Minimize log\">&#x2212;</button><button onclick=\"copyLog()\" title=\"Copy log\" aria-label=\"Copy log\">&#x29C9;</button><button onclick=\"clearLog()\" title=\"Clear log\" aria-label=\"Clear log\">&#x2715;</button></div><div id=log>...</div></div>"
 "</div>"
-"<p style='opacity:.45;font-size:.8em'>Firmware-Update per <code>make push</code> (OTA)</p>"
 "<script>"
 "function req(u){return fetch(u,{cache:'no-store'});}"
 "function go(k){req('/api/beamer/'+k).then(r=>r.text()).then(_=>setTimeout(load,400));}"
