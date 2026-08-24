@@ -443,9 +443,11 @@ cropToggle.addEventListener("change", () => {
 document.querySelectorAll("[data-vinput]").forEach((btn) => {
   btn.addEventListener("click", () => {
     const port = btn.getAttribute("data-vinput");
-    if (vertexInfo) vertexInfo.textContent = "Schalte auf " + port + " …";
-    fetch(`/api/vertex/set/input/${port}`)
-      .then(() => setTimeout(fetchVertexInfo, 700))
+    if (vertexInfo)
+      vertexInfo.textContent = "Schalte auf " + btn.textContent.trim() + " …";
+    // /api/source (not /api/vertex/set/input) — it sets the matching scale too.
+    fetch(`/api/source/${port}`)
+      .then(() => setTimeout(fetchVertexInfo, 1500))
       .catch(() => {});
   });
 });

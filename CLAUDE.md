@@ -65,9 +65,11 @@ Infinite loop switching on `ambiPi.mode()`:
 - **Off / White / Color** — static fills.
 - **Rainbow / Vegas / Knightrider / TestPattern / LeftSide(goal) / RightSide(goal)** — animations.
 - **AmbiLight** — grab from a **USB capture device** `VideoCapture(0, CAP_V4L2)` at a configurable
-  resolution (`/api/capres`, default 1280×720; V4L2 backend forced — GStreamer mis-decodes the grabber's
-  YUYV). Then per enabled output: `calculateAmbilightFromFrame` (always), `calculateDisplayFrameFromFrame`,
-  `calculateGameWallFrameFromFrame` (kicker lights call is commented out). Fixed `usleep(40 ms)`/iteration
+  resolution (`/api/capres`, code default 1280×720, but the deliberate runtime setting is **640×480**
+  — plenty, since the edges get downsampled to 60/34 LEDs anyway; V4L2 backend forced — GStreamer
+  mis-decodes the grabber's YUYV). Then per enabled output: `calculateAmbilightFromFrame` (always),
+  `calculateDisplayFrameFromFrame`, `calculateGameWallFrameFromFrame` (kicker lights call is commented
+  out). Fixed `usleep(40 ms)`/iteration
   → **~18–22 FPS** LED update rate (hard cap 25). (R/B swap was removed — V4L2 decodes correctly.)
   - **Letterbox/black-bar crop** (`/api/crop`, web UI toggle "Crop", default off): when on, `updateCropRect`
     (Canny, **throttled ~1×/s**) finds the content rect and `cropBorders` stretches it to fill, so the LEDs
@@ -133,6 +135,9 @@ Mostly `GET` "set" endpoints (path params), plain-text responses, CORS `*`:
 - `/api/hdr[/:enabled]` (HDR→SDR on/off) + `/api/hdrsat|hdrtint|hdrtemp[/:v]` (HDR calibration knobs),
   `/api/capres[/:w/:h]` (capture resolution)
 - `/api/vertex/{info,get/:key,set/:key/:value,hotplug}` — HDFury Vertex serial control (`Vertex`)
+- `/api/source/:src` — **switches Vertex input *and* the matching `scale` together** (`setSource`).
+  `atari|pi|top` → `input top` + `scale none`; `appletv|atv|bot` → `input bot` + `scale auto`.
+  The web UI's Vertex buttons ("Atari"/"AppleTV") use this, not `/api/vertex/set/input`. See Gotchas.
 - `/api/beamer/on`, `/api/beamer/off` — JMGO projector power (`AtvRemote`, idempotent — see below)
 - `/api/beamer/{volup,voldown,mute,playpause}` — JMGO media/volume keys via the ATV remote (`sendKey`)
 - `/api/appletv/{on,off}` — Apple TV power, **proxied** to NodeRED `/inject/atvx_on|atvx_off` (pyatv lives on
@@ -201,7 +206,8 @@ The beamer host is hardcoded in `AtvRemote` (default ctor arg), the NodeRED host
 
 **`settings.json`** (`/var/lib/ambipi/settings.json`, runtime UI state, separate from `config.json`):
 `hdr_comp`, `hdr_sat`, `hdr_tint`, `hdr_temp`, `cap_width`, `cap_height`. Persisted on change, loaded at
-start. (Toggles like display/table/gamewall/crop are *not* persisted.)
+start. `cap_width`/`cap_height` = **640×480 is intentional**, not drift from the 1280×720 code
+default. (Toggles like display/table/gamewall/crop are *not* persisted.)
 
 ## Gotchas
 
@@ -211,3 +217,17 @@ start. (Toggles like display/table/gamewall/crop are *not* persisted.)
   inside `render()` (other senders still fire if enabled — they just fail silently on no route).
 - LED corner colors and the bottom-left "fix" (`LEDS_LEFT-2/-3`) are intentional empirical tweaks
   (see recent commits "Fixed shelves 30 and 36", "Adds quarter-sampling").
+- **Vertex `scale` is global and must follow the input** (there is no per-output setting — FW 1.38.1.45
+  exposes only one `hdcp` and one `scale` for *both* outputs; no `scaletx0/1`, no `hdcptx0/1`).
+  Apple TV (`bot`) needs `scale auto`: the **scaler path is what performs the HDCP 2.2→1.4 conversion**,
+  so with `scale none` the grabber output stays pure black. Atari Pi (`top`) needs `scale none`: with
+  `auto`/`custom` the *beamer* output is garbled (repeated raster / frozen lower part), while the grabber
+  is fine. Use `/api/source/:src`, which sets both. Requires `autosw off` or the Vertex jumps back.
+- **The Vertex's two slide switches must sit in the MIDDLE position.** In the outer positions they hard-lock
+  `hdcp` and `scale` and every `set` is refused with `ERR: slidesw locked` — the serial API then silently
+  can't change anything (a locked `get scale` even answers *empty*, which looks like an unsupported command).
+- **A hung Vertex looks like a dead video path with a live MCU:** serial accepts and echoes every command
+  while both outputs stay black on both inputs. Fix = pull its power for ~20 s. Seen once; not a defect.
+- **Measuring the capture grabber: never loop over separate ffmpeg invocations.** Repeatedly opening and
+  closing `/dev/video0` destabilises this grabber and produces *false* black frames. Use ONE continuous
+  capture (`-t 20 -vf fps=1`, or `blackdetect`) — the first ~2 s are always black (device warm-up).

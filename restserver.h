@@ -61,6 +61,7 @@ public:
 	void getVertex(const Rest::Request &request, Http::ResponseWriter response);
 	void setVertex(const Rest::Request &request, Http::ResponseWriter response);
 	void hotplugVertex(const Rest::Request &request, Http::ResponseWriter response);
+	void setSource(const Rest::Request &request, Http::ResponseWriter response);
 	void getCaptureRes(const Rest::Request &request, Http::ResponseWriter response);
 	void setCaptureRes(const Rest::Request &request, Http::ResponseWriter response);
 	void beamerOff(const Rest::Request &request, Http::ResponseWriter response);

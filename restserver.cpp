@@ -39,6 +39,8 @@ RESTServer::RESTServer(AmbiPi* ambiPi) : _ambiPi(ambiPi)
 	Rest::Routes::Get(_router, "/api/vertex/set/:key/:value", Rest::Routes::bind(&RESTServer::setVertex, this));
 	Rest::Routes::Get(_router, "/api/vertex/hotplug",         Rest::Routes::bind(&RESTServer::hotplugVertex, this));
 
+	Rest::Routes::Get(_router, "/api/source/:src",            Rest::Routes::bind(&RESTServer::setSource, this));
+
 	Rest::Routes::Get(_router, "/api/capres",       Rest::Routes::bind(&RESTServer::getCaptureRes, this));
 	Rest::Routes::Get(_router, "/api/capres/:w/:h", Rest::Routes::bind(&RESTServer::setCaptureRes, this));
 
@@ -472,6 +474,30 @@ void RESTServer::hotplugVertex(const Rest::Request &request, Http::ResponseWrite
 	std::string resp = _vertex.command("hotplug") + "\n";
 	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, resp);
+}
+
+// Switch source input *and* the matching scaler mode in one go. The Vertex has
+// only one global `scale` for both outputs, so it has to follow the input:
+//   Apple TV (bot) needs `auto`  - the scaler path is what converts HDCP down,
+//                                  with `none` the grabber output stays black.
+//   Atari Pi (top) needs `none`  - with `auto` the scaler mangles the beamer
+//                                  output (garbled/repeated raster).
+// Requires `autosw off`, otherwise the Vertex jumps back on its own.
+void RESTServer::setSource(const Rest::Request &request, Http::ResponseWriter response)
+{
+	std::string src = request.param(":src").as<std::string>();
+	const char *input = nullptr, *scale = nullptr;
+	if (src == "atari" || src == "pi" || src == "top")             { input = "top"; scale = "none"; }
+	else if (src == "appletv" || src == "atv" || src == "bot")     { input = "bot"; scale = "auto"; }
+
+	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
+	if (!input) {
+		response.send(Http::Code::Bad_Request, "unknown source (atari|appletv)\n");
+		return;
+	}
+	bool ok = _vertex.set("input", input);
+	ok = _vertex.set("scale", scale) && ok;   // no short-circuit: scale must be sent
+	response.send(Http::Code::Ok, ok ? "ok\n" : "error\n");
 }
 
 // --- Becker Centronic roller-shutter / projection-screen control -----------
