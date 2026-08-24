@@ -234,13 +234,19 @@ default. (Toggles like display/table/gamewall/crop are *not* persisted.)
 - **Measuring the capture grabber: never loop over separate ffmpeg invocations.** Repeatedly opening and
   closing `/dev/video0` destabilises this grabber and produces *false* black frames. Use ONE continuous
   capture (`-t 20 -vf fps=1`, or `blackdetect`) — the first ~2 s are always black (device warm-up).
-- **The Vertex garbles colours from the Pi and there is no known fix.** It always interprets its input
-  as YCbCr: feed it RGB and the whole picture turns green/magenta, feed it YCbCr (`hdmi_pixel_encoding=3`
-  or `4`) and greys stay neutral while saturated colours rotate ~90° (theme brown `#6B553F` → green).
-  It also reports a nonsense 3840x1080 to the beamer. The Apple TV through the same Vertex is correct,
-  and the *same* Pi signal on a directly attached monitor is correct — so the fault is in the Vertex.
-  Ruled out by measurement: all four `hdmi_pixel_encoding` values, both EDID modes plus a hand-built
-  1080p-only EDID via `hdmi_edid_file`, `hdmi_ignore_edid`, `disable_fw_kms_setup`, both Vertex inputs
-  (cables swapped), all three `scale` modes, and `vc4-kms-v3d` (full KMS picks a clean CEA mode from the
-  EDID — colours stayed wrong, and it can only output RGB, so it is *worse*: `output_format=RGB`,
-  no YCbCr 4:4:4). Grabber and beamer see the identical error, so it happens before the Vertex splits.
+- **The Pi must feed the Vertex in DVI mode (`hdmi_drive=1`), or all colours are wrong.** With
+  `hdmi_drive=2` the Pi sends an AVI InfoFrame and the Vertex consistently misreads it as YCbCr: greys
+  stay neutral but saturated colours rotate ~90° (theme brown `#6B553F` → green), and with an RGB
+  `hdmi_pixel_encoding` even the greys turn green/magenta. `hdmi_drive=1` omits the InfoFrame, so the
+  sink must assume RGB — blacks become real black (0/255 range) and every hue is correct.
+  The tell was that colours were right *only* during early boot, when the firmware drives the output
+  without an InfoFrame. **Cost: no HDMI audio from the Pi** (use `card 1: bcm2835 Headphones`).
+  Only the Pi's own output is affected; the Apple TV path is untouched.
+  Measured dead ends before this was found, so they need not be retried: all four `hdmi_pixel_encoding`
+  values, every resolution from 640x480 to 1080p, both EDID modes plus a hand-built 1080p-only EDID via
+  `hdmi_edid_file`, `hdmi_ignore_edid`, `disable_fw_kms_setup`, both Vertex inputs (cables swapped), all
+  three `scale` modes, and `vc4-kms-v3d` (worse — it can only output RGB, `output_format=RGB`).
+- **4K from the Pi through the Vertex is impossible.** Both EDIDs in the chain declare a max TMDS clock
+  far below the 594 MHz that 4K60 needs (Vertex 300 MHz, JMGO via `automix` 340 MHz), and under
+  `vc4-fkms-v3d` the Pi only ever offers 1920x1080 modes for that connector anyway — 4K modes appear in
+  the list only under full KMS, which breaks the colours.
