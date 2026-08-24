@@ -504,6 +504,12 @@ void RESTServer::setSource(const Rest::Request &request, Http::ResponseWriter re
 	bool ok = _vertex.set("input", input);
 	ok = _vertex.set("scale", scale) && ok;
 	ok = _vertex.set("hdrcustom", hdr) && ok;
+	// Force a re-negotiation. Taking a source over again, the Vertex sometimes
+	// falls back to reading it as YCbCr, which turns the Pi's colours green;
+	// a hotplug reliably clears that. Intermittent, so this is a cheap guard
+	// rather than a proven cure. Failure here is not fatal - the switch itself
+	// already happened.
+	_vertex.command("hotplug");
 	response.send(Http::Code::Ok, ok ? "ok\n" : "error\n");
 }
 
