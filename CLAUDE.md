@@ -239,6 +239,8 @@ default. (Toggles like display/table/gamewall/crop are *not* persisted.)
   stay neutral but saturated colours rotate ~90° (theme brown `#6B553F` → green), and with an RGB
   `hdmi_pixel_encoding` even the greys turn green/magenta. `hdmi_drive=1` omits the InfoFrame, so the
   sink must assume RGB — blacks become real black (0/255 range) and every hue is correct.
+  The same misread InfoFrame also made the beamer report a nonsense **3840x1080**; with `hdmi_drive=1`
+  it reports 1920x1080/60/SDR correctly, so that readout is a quick check that the InfoFrame is sane.
   The tell was that colours were right *only* during early boot, when the firmware drives the output
   without an InfoFrame. **Cost: no HDMI audio from the Pi** (use `card 1: bcm2835 Headphones`).
   Only the Pi's own output is affected; the Apple TV path is untouched.
