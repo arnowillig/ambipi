@@ -135,8 +135,9 @@ Mostly `GET` "set" endpoints (path params), plain-text responses, CORS `*`:
 - `/api/hdr[/:enabled]` (HDR→SDR on/off) + `/api/hdrsat|hdrtint|hdrtemp[/:v]` (HDR calibration knobs),
   `/api/capres[/:w/:h]` (capture resolution)
 - `/api/vertex/{info,get/:key,set/:key/:value,hotplug}` — HDFury Vertex serial control (`Vertex`)
-- `/api/source/:src` — **switches Vertex input *and* the matching `scale` together** (`setSource`).
-  `atari|pi|top` → `input top` + `scale none`; `appletv|atv|bot` → `input bot` + `scale auto`.
+- `/api/source/:src` — **switches Vertex input + `scale` + `hdrcustom` together** (`setSource`).
+  `atari|pi|top` → `input top` + `scale none` + `hdrcustom off`;
+  `appletv|atv|bot` → `input bot` + `scale auto` + `hdrcustom on`.
   The web UI's Vertex buttons ("Atari"/"AppleTV") use this, not `/api/vertex/set/input`. See Gotchas.
 - `/api/beamer/on`, `/api/beamer/off` — JMGO projector power (`AtvRemote`, idempotent — see below)
 - `/api/beamer/{volup,voldown,mute,playpause}` — JMGO media/volume keys via the ATV remote (`sendKey`)
@@ -222,7 +223,9 @@ default. (Toggles like display/table/gamewall/crop are *not* persisted.)
   Apple TV (`bot`) needs `scale auto`: the **scaler path is what performs the HDCP 2.2→1.4 conversion**,
   so with `scale none` the grabber output stays pure black. Atari Pi (`top`) needs `scale none`: with
   `auto`/`custom` the *beamer* output is garbled (repeated raster / frozen lower part), while the grabber
-  is fine. Use `/api/source/:src`, which sets both. Requires `autosw off` or the Vertex jumps back.
+  is fine. **`hdrcustom` is global too** and must follow as well: the Apple TV sends HDR and wants it
+  `on`, the Pi is plain SDR and gets a PQ/BT.2020 pipeline applied to it when it is left `on`.
+  Use `/api/source/:src`, which sets all three. Requires `autosw off` or the Vertex jumps back.
 - **The Vertex's two slide switches must sit in the MIDDLE position.** In the outer positions they hard-lock
   `hdcp` and `scale` and every `set` is refused with `ERR: slidesw locked` — the serial API then silently
   can't change anything (a locked `get scale` even answers *empty*, which looks like an unsupported command).
@@ -231,3 +234,13 @@ default. (Toggles like display/table/gamewall/crop are *not* persisted.)
 - **Measuring the capture grabber: never loop over separate ffmpeg invocations.** Repeatedly opening and
   closing `/dev/video0` destabilises this grabber and produces *false* black frames. Use ONE continuous
   capture (`-t 20 -vf fps=1`, or `blackdetect`) — the first ~2 s are always black (device warm-up).
+- **The Vertex garbles colours from the Pi and there is no known fix.** It always interprets its input
+  as YCbCr: feed it RGB and the whole picture turns green/magenta, feed it YCbCr (`hdmi_pixel_encoding=3`
+  or `4`) and greys stay neutral while saturated colours rotate ~90° (theme brown `#6B553F` → green).
+  It also reports a nonsense 3840x1080 to the beamer. The Apple TV through the same Vertex is correct,
+  and the *same* Pi signal on a directly attached monitor is correct — so the fault is in the Vertex.
+  Ruled out by measurement: all four `hdmi_pixel_encoding` values, both EDID modes plus a hand-built
+  1080p-only EDID via `hdmi_edid_file`, `hdmi_ignore_edid`, `disable_fw_kms_setup`, both Vertex inputs
+  (cables swapped), all three `scale` modes, and `vc4-kms-v3d` (full KMS picks a clean CEA mode from the
+  EDID — colours stayed wrong, and it can only output RGB, so it is *worse*: `output_format=RGB`,
+  no YCbCr 4:4:4). Grabber and beamer see the identical error, so it happens before the Vertex splits.
