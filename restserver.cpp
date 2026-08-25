@@ -464,6 +464,11 @@ void RESTServer::setVertex(const Rest::Request &request, Http::ResponseWriter re
 	std::string key   = request.param(":key").as<std::string>();
 	std::string value = request.param(":value").as<std::string>();
 	bool ok = _vertex.set(key, value);
+	// Keep our own HDR->SDR compensation in step with the Vertex: it only makes
+	// sense while the Vertex actually puts out HDR. Also covers changing
+	// hdrcustom by hand, not just via /api/source.
+	if (ok && key == "hdrcustom")
+		_ambiPi->setHdrComp(value == "on");
 	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	response.send(Http::Code::Ok, ok ? "ok\n" : "error\n");
 }
@@ -486,13 +491,17 @@ void RESTServer::hotplugVertex(const Rest::Request &request, Http::ResponseWrite
 //                                   output (garbled/repeated raster).
 //                   `hdrcustom off` - the Pi is plain SDR; forcing HDR makes the
 //                                   beamer apply a PQ/BT.2020 pipeline to it.
+// AmbiPi's own HDR->SDR compensation follows the same split: it undoes a PQ
+// curve and BT.2020 primaries, which is right for the Apple TV and wrong for
+// the Pi's plain SDR.
 // Requires `autosw off`, otherwise the Vertex jumps back on its own.
 void RESTServer::setSource(const Rest::Request &request, Http::ResponseWriter response)
 {
 	std::string src = request.param(":src").as<std::string>();
 	const char *input = nullptr, *scale = nullptr, *hdr = nullptr;
-	if (src == "atari" || src == "pi" || src == "top")          { input = "top"; scale = "none"; hdr = "off"; }
-	else if (src == "appletv" || src == "atv" || src == "bot")  { input = "bot"; scale = "auto"; hdr = "on";  }
+	bool hdrComp = false;
+	if (src == "atari" || src == "pi" || src == "top")          { input = "top"; scale = "none"; hdr = "off"; hdrComp = false; }
+	else if (src == "appletv" || src == "atv" || src == "bot")  { input = "bot"; scale = "auto"; hdr = "on";  hdrComp = true;  }
 
 	response.headers().add<Http::Header::AccessControlAllowOrigin>("*");
 	if (!input) {
@@ -510,6 +519,7 @@ void RESTServer::setSource(const Rest::Request &request, Http::ResponseWriter re
 	// rather than a proven cure. Failure here is not fatal - the switch itself
 	// already happened.
 	_vertex.command("hotplug");
+	_ambiPi->setHdrComp(hdrComp);
 	response.send(Http::Code::Ok, ok ? "ok\n" : "error\n");
 }
 

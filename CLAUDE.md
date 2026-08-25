@@ -135,9 +135,13 @@ Mostly `GET` "set" endpoints (path params), plain-text responses, CORS `*`:
 - `/api/hdr[/:enabled]` (HDR→SDR on/off) + `/api/hdrsat|hdrtint|hdrtemp[/:v]` (HDR calibration knobs),
   `/api/capres[/:w/:h]` (capture resolution)
 - `/api/vertex/{info,get/:key,set/:key/:value,hotplug}` — HDFury Vertex serial control (`Vertex`)
-- `/api/source/:src` — **switches Vertex input + `scale` + `hdrcustom` together** (`setSource`).
+- `/api/source/:src` — **switches Vertex input + `scale` + `hdrcustom` together** (`setSource`),
+  then fires a `hotplug` to force a clean re-negotiation.
   `atari|pi|top` → `input top` + `scale none` + `hdrcustom off`;
   `appletv|atv|bot` → `input bot` + `scale auto` + `hdrcustom on`.
+  AmbiPi's own HDR→SDR compensation (`/api/hdr`) is slaved to `hdrcustom` — set either through
+  `/api/source` or through `/api/vertex/set/hdrcustom/:v` and the other follows, since undoing a PQ
+  curve only makes sense while the Vertex actually emits HDR.
   The web UI's Vertex buttons ("Atari"/"AppleTV") use this, not `/api/vertex/set/input`. See Gotchas.
 - `/api/beamer/on`, `/api/beamer/off` — JMGO projector power (`AtvRemote`, idempotent — see below)
 - `/api/beamer/{volup,voldown,mute,playpause}` — JMGO media/volume keys via the ATV remote (`sendKey`)
